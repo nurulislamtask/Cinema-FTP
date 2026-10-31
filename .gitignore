@@ -1,0 +1,24 @@
+# dependencies & build output
+node_modules/
+dist/
+release/
+build-bin/
+electron/server.cjs
+android/
+coverage/
+
+# keep the app icons that the installers need
+build/*
+!build/icon.png
+!build/icon.ico
+
+# local config / secrets
+.env
+.env.*
+!.env.example
+
+# misc
+*.log
+.DS_Store
+.vercel
+bun.lock

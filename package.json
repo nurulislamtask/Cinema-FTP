@@ -1,0 +1,113 @@
+{
+  "name": "cinema-ftp",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build",
+    "start": "node server.ts",
+    "preview": "vite preview",
+    "clean": "rm -rf dist server.js",
+    "lint": "tsc --noEmit",
+    "desktop:prepare": "node scripts/build-desktop.mjs",
+    "desktop:run": "npm run desktop:prepare && electron .",
+    "desktop:build": "npm run desktop:prepare && electron-builder --win --x64",
+    "desktop:publish": "npm run desktop:prepare && electron-builder --win --x64 --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@google/genai": ">=1.0.0",
+    "@tailwindcss/vite": ">=4.0.0",
+    "@types/express": "^4.17.21",
+    "@types/node": ">=20.0.0",
+    "@types/react": ">=19.0.0",
+    "@types/react-dom": ">=19.0.0",
+    "@vitejs/plugin-react": ">=4.3.0",
+    "autoprefixer": "^10.4.21",
+    "dotenv": ">=16.4.0",
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": ">=0.25.0",
+    "express": "^4.21.2",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
+    "lucide-react": ">=0.400.0",
+    "motion": ">=12.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": ">=4.0.0",
+    "tsx": ">=4.19.0",
+    "typescript": ">=5.5.0",
+    "vite": ">=6.0.0"
+  },
+  "description": "CineFTP - a cinema-style browser and player for FTP / HTTP open-directory media servers. Windows desktop app with auto-update, Android APK, and web.",
+  "author": "nurulislamtask",
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.cineftp.desktop",
+    "productName": "CineFTP",
+    "asar": false,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/main.cjs",
+      "electron/server.cjs",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build-bin",
+        "to": "bin"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "CineFTP-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "CineFTP",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "uninstallDisplayName": "CineFTP"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "nurulislamtask",
+        "repo": "Cinema-FTP",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "homepage": "https://github.com/nurulislamtask/Cinema-FTP#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nurulislamtask/Cinema-FTP.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nurulislamtask/Cinema-FTP/issues"
+  }
+}
