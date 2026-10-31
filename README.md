@@ -42,7 +42,6 @@ Go to the **[Releases](https://github.com/nurulislamtask/Cinema-FTP/releases/lat
 2. Open **Settings → Sources → Add source**, paste a folder link, e.g. `http://172.16.50.14/DHAKA-FLIX-14/Hindi%20Movies/`.
 3. Open the source from the sidebar. The first scan of a big server takes a little while; afterwards it is cached.
 
-Optional AI assistant: create `%APPDATA%\CineFTP\.env` containing `GEMINI_API_KEY=your_key`.
 
 ## Development
 
