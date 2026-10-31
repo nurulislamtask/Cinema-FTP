@@ -38,10 +38,26 @@ jobs:
       - run: npm install --legacy-peer-deps --no-audit --no-fund
       - run: npm run desktop:prepare
       - name: Build + publish installer (creates the GitHub release v${{ needs.version.outputs.v }})
-        run: npx electron-builder --win --x64 --publish always "-c.extraMetadata.version=${{ needs.version.outputs.v }}"
+        shell: bash
+        run: |
+          set -o pipefail
+          npx electron-builder --win --x64 --publish always "-c.extraMetadata.version=${{ needs.version.outputs.v }}" 2>&1 | tee build.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Save build log on failure (branch ci-logs)
+        if: failure()
+        shell: bash
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan ci-logs
+          git rm -rf --quiet . || true
+          tail -n 300 build.log > ../ci.log 2>/dev/null || true
+          mv ../ci.log windows-build.log 2>/dev/null || echo "no log" > windows-build.log
+          git add windows-build.log
+          git commit -q -m "windows build log"
+          git push -f origin ci-logs
 
   android:
     needs: [version, windows]
