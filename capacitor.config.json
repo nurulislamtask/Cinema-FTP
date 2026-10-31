@@ -1,0 +1,13 @@
+{
+  "appId": "com.cineftp.mobile",
+  "appName": "CineFTP",
+  "webDir": "dist",
+  "backgroundColor": "#090A0F",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
