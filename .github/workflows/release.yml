@@ -1,0 +1,75 @@
+name: Release (Windows installer + Android APK)
+
+# Every time you commit to the main branch (upload / edit files on github.com), this builds
+# the Windows installer + the Android APK and puts them on the "Releases" page as version 1.0.<N>.
+# Installed CineFTP apps then show an "update available" notification.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      v: ${{ steps.v.outputs.v }}
+    steps:
+      - id: v
+        run: echo "v=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --legacy-peer-deps --no-audit --no-fund
+      - run: npm run desktop:prepare
+      - name: Build + publish installer (creates the GitHub release v${{ needs.version.outputs.v }})
+        run: npx electron-builder --win --x64 --publish always "-c.extraMetadata.version=${{ needs.version.outputs.v }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+  android:
+    needs: [version, windows]
+    if: ${{ needs.windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm install --legacy-peer-deps --no-audit --no-fund
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npx vite build
+      - run: npx cap add android
+      - run: pip install pillow && python scripts/android-prepare.py
+      - run: npx cap sync android
+      - name: Build APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: Attach APK to the release
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk "CineFTP-${{ needs.version.outputs.v }}.apk"
+          gh release upload "v${{ needs.version.outputs.v }}" "CineFTP-${{ needs.version.outputs.v }}.apk" --clobber --repo "${{ github.repository }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
