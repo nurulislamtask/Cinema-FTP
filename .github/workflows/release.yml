@@ -37,6 +37,13 @@ jobs:
           node-version: 22
       - run: npm install --legacy-peer-deps --no-audit --no-fund
       - run: npm run desktop:prepare
+      - name: Create release tag v${{ needs.version.outputs.v }}
+        shell: bash
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git tag "v${{ needs.version.outputs.v }}"
+          git push origin "v${{ needs.version.outputs.v }}"
       - name: Build + publish installer (creates the GitHub release v${{ needs.version.outputs.v }})
         shell: bash
         run: |
