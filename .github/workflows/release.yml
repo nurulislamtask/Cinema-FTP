@@ -30,6 +30,8 @@ jobs:
   windows:
     needs: version
     runs-on: windows-latest
+    outputs:
+      repo: ${{ steps.rel.outputs.repo }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,21 +41,28 @@ jobs:
       - run: npm run desktop:prepare
         env:
           APP_VERSION: ${{ needs.version.outputs.v }}
-      - name: Create the release (so uploads never create duplicates)
+      - name: Create the release (public CineFTP-Releases repo; falls back to this repo if the token is rejected)
+        id: rel
         shell: bash
         run: |
-          set -o pipefail
-          if [ -z "$GH_TOKEN" ]; then echo "RELEASES_TOKEN secret is EMPTY or missing" | tee build.log; exit 1; fi
-          gh release create "v${{ needs.version.outputs.v }}" --repo nurulislamtask/CineFTP-Releases --title "CineFTP ${{ needs.version.outputs.v }}" --notes "Windows installer (auto-updates) and Android APK." 2>&1 | tee build.log
+          V="v${{ needs.version.outputs.v }}"
+          if [ -n "$RELEASES_TOKEN" ] && GH_TOKEN="$RELEASES_TOKEN" gh release create "$V" --repo nurulislamtask/CineFTP-Releases --title "CineFTP ${{ needs.version.outputs.v }}" --notes "Windows installer (auto-updates) and Android APK." 2>&1 | tee build.log; then
+            echo "repo=CineFTP-Releases" >> "$GITHUB_OUTPUT"
+          else
+            echo "WARNING: RELEASES_TOKEN rejected, publishing to this repository instead" | tee -a build.log
+            GH_TOKEN="$GITHUB_TOKEN" gh release create "$V" --repo "${{ github.repository }}" --title "CineFTP ${{ needs.version.outputs.v }}" --notes "Windows installer and Android APK." 2>&1 | tee -a build.log
+            echo "repo=${{ github.event.repository.name }}" >> "$GITHUB_OUTPUT"
+          fi
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build + publish installer (creates the GitHub release v${{ needs.version.outputs.v }})
         shell: bash
         run: |
           set -o pipefail
-          npx electron-builder --win --x64 --publish always "-c.extraMetadata.version=${{ needs.version.outputs.v }}" 2>&1 | tee build.log
+          npx electron-builder --win --x64 --publish always "-c.extraMetadata.version=${{ needs.version.outputs.v }}" "-c.publish.repo=${{ steps.rel.outputs.repo }}" 2>&1 | tee -a build.log
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GH_TOKEN: ${{ steps.rel.outputs.repo == 'CineFTP-Releases' && secrets.RELEASES_TOKEN || secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Save build log on failure (branch ci-logs)
         if: failure()
@@ -102,6 +111,6 @@ jobs:
       - name: Attach APK to the release
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk "CineFTP-${{ needs.version.outputs.v }}.apk"
-          gh release upload "v${{ needs.version.outputs.v }}" "CineFTP-${{ needs.version.outputs.v }}.apk" --clobber --repo nurulislamtask/CineFTP-Releases
+          gh release upload "v${{ needs.version.outputs.v }}" "CineFTP-${{ needs.version.outputs.v }}.apk" --clobber --repo "nurulislamtask/${{ needs.windows.outputs.repo }}"
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GH_TOKEN: ${{ needs.windows.outputs.repo == 'CineFTP-Releases' && secrets.RELEASES_TOKEN || secrets.GITHUB_TOKEN }}

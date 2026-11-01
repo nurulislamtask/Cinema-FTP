@@ -8,6 +8,15 @@ import { resolvePlayableFromFolder, getCachedPlayableUrl, saveCachedPlayableUrl 
 const DIRECT_VIDEO = /\.(mp4|mkv|webm|avi|mov|ts|m4v|m2ts|wmv|flv)(\?.*)?$/i;
 const POS_KEY = 'cineftp_resume_v1';
 
+// Names with spaces / brackets / non-English letters must be percent-encoded for the native player (the web view was forgiving)
+function safeUrl(u: string): string {
+  try {
+    return new URL(u).href;
+  } catch {
+    return encodeURI(u);
+  }
+}
+
 function readPositions(): Record<string, { t: number; d: number }> {
   try {
     return JSON.parse(localStorage.getItem(POS_KEY) || '{}');
@@ -61,7 +70,7 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
 
         // 2. queue = this episode + the other episodes of the season (next / previous buttons work)
         const toSub = (list: ParsedFtpItem[]) =>
-          list.slice(0, 25).map((s) => ({ url: s.url, label: s.cleanTitle || s.rawName }));
+          list.slice(0, 25).map((s) => ({ url: safeUrl(s.url), label: s.cleanTitle || s.rawName }));
         const epRegex = (ep?: number) =>
           ep ? new RegExp(`(?:e|x|ep\\.?\\s*)0*${ep}(?!\\d)`, 'i') : null;
 
@@ -70,18 +79,18 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
           if (p.id === video.id) {
             queue.push({
               id: p.id,
-              item: { url, title: p.cleanTitle || p.rawName, subtitles: toSub(subtitles || []) },
+              item: { url: safeUrl(url), title: p.cleanTitle || p.rawName, subtitles: toSub(subtitles || []) },
             });
           } else if (!p.isDirectory && DIRECT_VIDEO.test(p.url)) {
             const re = epRegex(p.episode);
             const subs = re ? (subtitles || []).filter((s) => re.test(s.rawName)) : [];
-            queue.push({ id: p.id, item: { url: p.url, title: p.cleanTitle || p.rawName, subtitles: toSub(subs) } });
+            queue.push({ id: p.id, item: { url: safeUrl(p.url), title: p.cleanTitle || p.rawName, subtitles: toSub(subs) } });
           }
         }
         if (!queue.some((q) => q.id === video.id)) {
           queue.splice(0, queue.length, {
             id: video.id,
-            item: { url, title: video.cleanTitle || video.rawName, subtitles: toSub(subtitles || []) },
+            item: { url: safeUrl(url), title: video.cleanTitle || video.rawName, subtitles: toSub(subtitles || []) },
           });
         }
         const index = Math.max(0, queue.findIndex((q) => q.id === video.id));
