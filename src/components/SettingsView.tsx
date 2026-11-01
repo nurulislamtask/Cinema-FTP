@@ -20,6 +20,7 @@ import {
   Check,
 } from 'lucide-react';
 import { AppSource, SettingsTab } from '../types/cineftp';
+import { AboutPanel } from './AboutPanel';
 
 interface SettingsViewProps {
   sources: AppSource[];
@@ -181,6 +182,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         >
           <HardDrive className="w-4 h-4" />
           <span>Library & storage</span>
+        </button>
+
+        <button
+          onClick={() => setTab('about')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-colors cursor-pointer ${
+            tab === 'about'
+              ? 'bg-[#181E2B] text-white font-semibold'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#121620]'
+          }`}
+        >
+          <Info className="w-4 h-4" />
+          <span>About</span>
         </button>
       </div>
 
@@ -471,6 +484,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       )}
+
+      {tab === 'about' && <AboutPanel />}
 
       {/* TAB 4: AI ASSISTANT */}
       {tab === 'ai_assistant' && (

@@ -37,6 +37,8 @@ jobs:
           node-version: 22
       - run: npm install --legacy-peer-deps --no-audit --no-fund
       - run: npm run desktop:prepare
+        env:
+          APP_VERSION: ${{ needs.version.outputs.v }}
       - name: Create release tag v${{ needs.version.outputs.v }}
         shell: bash
         run: |

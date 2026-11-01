@@ -43,4 +43,5 @@ export type SettingsTab =
   | 'player'
   | 'movie_info'
   | 'ai_assistant'
-  | 'library_storage';
+  | 'library_storage'
+  | 'about';
