@@ -433,6 +433,15 @@ export default function App() {
       const seenIds = new Set<string>(combined.map((i) => i.id));
       if (alive()) setCatalogItems([...combined]);
 
+      let flushTimer: number | null = null;
+      const scheduleFlush = () => {
+        if (flushTimer !== null) return;
+        flushTimer = window.setTimeout(() => {
+          flushTimer = null;
+          if (alive()) setCatalogItems([...combined]);
+        }, 1000);
+      };
+
       let finishedCount = 0;
       await Promise.all(
         targetSources.map(async (src) => {
@@ -462,9 +471,8 @@ export default function App() {
                     addedAny = true;
                   }
                 }
-                if (addedAny && alive()) {
-                  setCatalogItems([...combined]);
-                }
+                // Re-drawing the whole catalog for every chunk of 15 servers froze phones: at most once per second
+                if (addedAny && alive()) scheduleFlush();
               }
             );
             updateSourceCount(src.url, scanRes.totalEstimatedCount || scanRes.unpackedItems.length);
@@ -479,7 +487,12 @@ export default function App() {
         })
       );
 
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer);
+        flushTimer = null;
+      }
       if (alive()) {
+        setCatalogItems([...combined]);
         setIsLoading(false);
         setIsDeepScanning(false);
       }

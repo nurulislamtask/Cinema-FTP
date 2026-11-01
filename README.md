@@ -30,7 +30,7 @@ Go to the **[Releases](https://github.com/nurulislamtask/Cinema-FTP/releases/lat
 - **Open-directory browser** – works with Apache / nginx / h5ai style listings (`http://`, `https://`; `ftp://` on desktop/web).
 - **Automatic library** – folders are scanned (year folders, `A–Z` buckets, quality folders) and shown as movie / series cards, newest first, duplicates (720p + 1080p) merged to the best quality.
 - **Posters and details** – fetched automatically (IMDb suggestions, TVMaze, iTunes), cached locally so the next start is instant.
-- **Cinema player** – seek bar, playback speed, subtitles (external `.srt`/`.vtt`), multi-audio tracks, watch-progress memory.
+- **Cinema player** – seek bar, speed, subtitles, multi-audio tracks, resume. On Android a native MX-Player-style player with swipe brightness / volume / seek gestures.
 - **Plays more formats on desktop** – MKV, AC3 / DTS audio and HEVC are converted on the fly with a bundled `ffmpeg`.
 - **Direct LAN access** – the desktop and Android apps talk to private BDIX / LAN servers (`172.16.x.x`, `192.168.x.x`) directly.
 - **Watchlist, recently played, search, filters** (industry, genre, year, audio).
