@@ -46,6 +46,13 @@ jobs:
         shell: bash
         run: |
           V="v${{ needs.version.outputs.v }}"
+          {
+            echo "--- token diagnostics ---"
+            echo "secret length: ${#RELEASES_TOKEN}"
+            GH_TOKEN="$RELEASES_TOKEN" gh api -i repos/nurulislamtask/CineFTP-Releases 2>&1 | grep -iE "^HTTP|x-oauth-scopes|x-accepted|\"(push|admin|pull)\"|\"private\"|\"message\"" | head -12
+            GH_TOKEN="$RELEASES_TOKEN" gh api -i repos/nurulislamtask/CineFTP-Releases/contents/README.md 2>&1 | grep -iE "^HTTP|x-accepted|\"message\"" | head -4
+            echo "--- end diagnostics ---"
+          } 2>&1 | tee build.log
           if [ -n "$RELEASES_TOKEN" ] && GH_TOKEN="$RELEASES_TOKEN" gh release create "$V" --repo nurulislamtask/CineFTP-Releases --title "CineFTP ${{ needs.version.outputs.v }}" --notes "Windows installer (auto-updates) and Android APK." 2>&1 | tee build.log; then
             echo "repo=CineFTP-Releases" >> "$GITHUB_OUTPUT"
           else
@@ -65,7 +72,7 @@ jobs:
           GH_TOKEN: ${{ steps.rel.outputs.repo == 'CineFTP-Releases' && secrets.RELEASES_TOKEN || secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Save build log on failure (branch ci-logs)
-        if: failure()
+        if: always()
         shell: bash
         run: |
           git config user.name "github-actions"
