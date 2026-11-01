@@ -264,9 +264,14 @@ public class PlayerActivity extends AppCompatActivity {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {
-                errorMessage = error.getErrorCodeName() + (error.getMessage() != null ? ": " + error.getMessage() : "");
-                showHud("Cannot play this file");
-                ui.postDelayed(PlayerActivity.this::finish, 1200);
+                Throwable c = error.getCause();
+                errorMessage = error.getErrorCodeName()
+                    + (c != null ? " / " + c.getClass().getSimpleName() + ": " + c.getMessage()
+                                 : (error.getMessage() != null ? " / " + error.getMessage() : ""));
+                // keep the screen and show the real reason (user can read it / send a screenshot), close with the X button
+                topBar.setVisibility(View.VISIBLE);
+                showHudSticky("Cannot play this file\n" + errorMessage);
+                hudView.setTextSize(13f);
             }
 
             @Override

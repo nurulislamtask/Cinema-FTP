@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { ParsedFtpItem } from '../utils/ftpParser';
-import { CinemaPlayerWeb, CinemaPlayerProps } from './CinemaPlayer';
+import type { CinemaPlayerProps } from './CinemaPlayer';
 import { NativePlayer, NativePlayerItem } from '../mobile/nativePlayer';
 import { resolvePlayableFromFolder, getCachedPlayableUrl, saveCachedPlayableUrl } from '../services/ftpClient';
 
@@ -29,13 +29,16 @@ function savePosition(id: string, t: number, d: number) {
 /** Opens the native phone player for the chosen video, then closes this screen when the user leaves it. */
 export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
   const { video, playlist, subtitles, initialStartTime = 0, onClose } = props;
-  const [fallback, setFallback] = useState<number | null>(null); // seconds to resume in the web player
+  const [failure, setFailure] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState('Opening player…');
   const launchedFor = useRef<string | null>(null);
 
   useEffect(() => {
-    if (launchedFor.current === video.id) return;
-    launchedFor.current = video.id;
+    const key = video.id + '#' + attempt;
+    if (launchedFor.current === key) return;
+    launchedFor.current = key;
+    setFailure(null);
     let alive = true;
 
     (async () => {
@@ -107,11 +110,7 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
     return () => {
       alive = false;
     };
-  }, [video.id]);
-
-  if (fallback !== null) {
-    return <CinemaPlayerWeb {...props} initialStartTime={fallback} />;
-  }
+  }, [video.id, attempt]);
 
   return (
     <div className="fixed inset-0 z-[300] bg-black flex flex-col items-center justify-center text-zinc-300 gap-4">
@@ -122,8 +121,27 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
       >
         <ArrowLeft className="w-5 h-5" />
       </button>
-      <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-[#E5A00D] animate-spin" />
-      <p className="text-sm">{status}</p>
+      {failure ? (
+        <>
+          <p className="px-8 text-center text-sm text-rose-300 whitespace-pre-wrap break-words">{failure}</p>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-white/10 text-white font-semibold">
+              Back
+            </button>
+            <button
+              onClick={() => setAttempt((a) => a + 1)}
+              className="px-5 py-2.5 rounded-xl bg-[#E5A00D] text-black font-bold"
+            >
+              Try again
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-[#E5A00D] animate-spin" />
+          <p className="text-sm">{status}</p>
+        </>
+      )}
     </div>
   );
 };
