@@ -92,6 +92,8 @@ public class PlayerActivity extends AppCompatActivity {
     private TextView aspectBtn;
     private TextView decoderBtn;
     private boolean softwareDecoders = false;
+    private boolean ffmpegAudio = true;
+    private int ladder = 0; // automatic recovery step (decoder combinations tried so far)
     private List<MediaItem> allItems = new ArrayList<>();
 
     @Override
@@ -278,7 +280,9 @@ public class PlayerActivity extends AppCompatActivity {
 
         // Software (ffmpeg) audio decoders are used when the phone cannot decode AC3 / EAC3 / DTS itself
         DefaultRenderersFactory renderers = new DefaultRenderersFactory(this)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            .setExtensionRendererMode(ffmpegAudio
+                ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                : DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
             .setEnableDecoderFallback(true);
         if (software) renderers.setMediaCodecSelector(softwareFirst());
 
@@ -301,19 +305,36 @@ public class PlayerActivity extends AppCompatActivity {
             @Override
             public void onPlayerError(PlaybackException error) {
                 int code = error.errorCode;
-                boolean decoderProblem = code == PlaybackException.ERROR_CODE_DECODING_FAILED
+                boolean recoverable = code == PlaybackException.ERROR_CODE_DECODING_FAILED
                     || code == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
                     || code == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED
-                    || code == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES;
-                if (decoderProblem && !softwareDecoders) {
-                    showHud("Switching to compatible decoder\u2026");
-                    switchDecoder(true);
+                    || code == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES
+                    || code == PlaybackException.ERROR_CODE_FAILED_RUNTIME_CHECK
+                    || code == PlaybackException.ERROR_CODE_UNSPECIFIED
+                    || code == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
+                    || code == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED;
+                if (recoverable && ladder < 3) {
+                    // try the next decoder combination: HW+ffmpeg -> SW+ffmpeg -> HW only -> SW only
+                    ladder++;
+                    boolean sw = ladder == 1 || ladder == 3;
+                    ffmpegAudio = ladder < 2;
+                    showHud("Trying another decoder (" + ladder + "/3)\u2026");
+                    ui.post(() -> switchDecoder(sw));
                     return;
                 }
                 Throwable c = error.getCause();
+                StringBuilder where = new StringBuilder();
+                if (c != null) {
+                    StackTraceElement[] st = c.getStackTrace();
+                    for (int i = 0; i < Math.min(3, st.length); i++) {
+                        where.append("\n  at ").append(st[i].getClassName()).append('.').append(st[i].getMethodName())
+                            .append(':').append(st[i].getLineNumber());
+                    }
+                }
                 errorMessage = error.getErrorCodeName()
                     + (c != null ? " / " + c.getClass().getSimpleName() + ": " + c.getMessage()
-                                 : (error.getMessage() != null ? " / " + error.getMessage() : ""));
+                                 : (error.getMessage() != null ? " / " + error.getMessage() : ""))
+                    + where;
                 // keep the screen and show the real reason, close with the X button
                 topBar.setVisibility(View.VISIBLE);
                 showHudSticky("Cannot play this file\n" + errorMessage);
