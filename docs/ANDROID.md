@@ -6,7 +6,7 @@ A phone has no Node backend, so `src/mobile/apiShim.ts` answers the `/api/*` cal
 
 ## Get the APK
 
-Download `CineFTP-<version>.apk` from the [Releases](https://github.com/nurulislamtask/Cinema-FTP/releases/latest) page.
+Download `CineFTP-<version>.apk` from the [Releases](https://github.com/nurulislamtask/CineFTP-Releases/releases/latest) page.
 It is built automatically by the release workflow (debug-signed, for personal use).
 
 ## Player (MX Player style)

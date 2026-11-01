@@ -3,7 +3,7 @@
 FTP / HTTP open-directory সার্ভারের ফোল্ডার লিংক দিলে Netflix-এর মতো মুভি ও সিরিজ লাইব্রেরি দেখায়, পোস্টারসহ, আর নিজস্ব প্লেয়ারে চালানো যায়।
 
 ## ডাউনলোড ও ইনস্টল
-1. [Releases](https://github.com/nurulislamtask/Cinema-FTP/releases/latest) পেজে যাও।
+1. [Releases](https://github.com/nurulislamtask/CineFTP-Releases/releases/latest) পেজে যাও।
 2. **PC:** `CineFTP-Setup-….exe` ডাউনলোড করে ইনস্টল করো। Desktop-এ **CineFTP** শর্টকাট পাবে।
    *"Windows protected your PC"* দেখালে **More info → Run anyway** চাপো।
 3. **ফোন:** `CineFTP-….apk` ডাউনলোড করে ইনস্টল করো ("Install unknown apps" allow করতে হবে)।

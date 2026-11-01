@@ -5,10 +5,10 @@
 **A cinema-style browser and player for FTP / HTTP open-directory media servers.**
 Point it at your server links and get a Netflix-like library: posters, years, quality tags, series and seasons, and a built-in player.
 
-[![Latest release](https://img.shields.io/github/v/release/nurulislamtask/Cinema-FTP?label=download&color=E50914)](https://github.com/nurulislamtask/Cinema-FTP/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/nurulislamtask/Cinema-FTP?label=download&color=E50914)](https://github.com/nurulislamtask/CineFTP-Releases/releases/latest)
 [![Build](https://github.com/nurulislamtask/Cinema-FTP/actions/workflows/release.yml/badge.svg)](https://github.com/nurulislamtask/Cinema-FTP/actions/workflows/release.yml)
 
-[Download](https://github.com/nurulislamtask/Cinema-FTP/releases/latest) · [বাংলা গাইড](README.bn.md) · [Report a bug](https://github.com/nurulislamtask/Cinema-FTP/issues/new/choose)
+[Download](https://github.com/nurulislamtask/CineFTP-Releases/releases/latest) · [বাংলা গাইড](README.bn.md) · [Report a bug](https://github.com/nurulislamtask/Cinema-FTP/issues/new/choose)
 
 </div>
 
@@ -16,7 +16,7 @@ Point it at your server links and get a Netflix-like library: posters, years, qu
 
 ## Download
 
-Go to the **[Releases](https://github.com/nurulislamtask/Cinema-FTP/releases/latest)** page:
+Go to the **[Releases](https://github.com/nurulislamtask/CineFTP-Releases/releases/latest)** page:
 
 | Platform | File | Notes |
 | --- | --- | --- |

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { IS_CAPACITOR } from '../utils/platform';
 import { NativePlayer } from '../mobile/nativePlayer';
 
-const REPO = 'nurulislamtask/Cinema-FTP';
+const REPO = 'nurulislamtask/CineFTP-Releases';
 
 function num(v: string): number[] {
   return v.replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);

@@ -6,9 +6,8 @@ export const ABOUT = {
   developer: 'nurulislamtask',
   links: [
     { label: 'GitHub profile', url: 'https://github.com/nurulislamtask' },
-    { label: 'Source code', url: 'https://github.com/nurulislamtask/Cinema-FTP' },
-    { label: 'Download latest version', url: 'https://github.com/nurulislamtask/Cinema-FTP/releases/latest' },
-    { label: 'Report a bug / request a feature', url: 'https://github.com/nurulislamtask/Cinema-FTP/issues/new/choose' },
+    { label: 'Download latest version', url: 'https://github.com/nurulislamtask/CineFTP-Releases/releases/latest' },
+    { label: 'All versions', url: 'https://github.com/nurulislamtask/CineFTP-Releases/releases' },
   ],
   // Put your own links here (full address, e.g. https://facebook.com/yourpage). Empty = hidden.
   social: [
