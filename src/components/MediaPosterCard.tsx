@@ -11,7 +11,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { ParsedFtpItem } from '../utils/ftpParser';
-import { fetchItemMetadata, EnrichedMetadata } from '../services/ftpClient';
+import { fetchItemMetadata, peekItemMetadata, EnrichedMetadata } from '../services/ftpClient';
 
 interface MediaPosterCardProps {
   item: ParsedFtpItem;
@@ -32,7 +32,7 @@ const MediaPosterCardComponent: React.FC<MediaPosterCardProps> = ({
   onToggleWatchlist,
   onMetadataLoaded,
 }) => {
-  const [meta, setMeta] = useState<EnrichedMetadata | null>(null);
+  const [meta, setMeta] = useState<EnrichedMetadata | null>(() => peekItemMetadata(item));
   const [imgFailed, setImgFailed] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -61,7 +61,7 @@ const MediaPosterCardComponent: React.FC<MediaPosterCardProps> = ({
           observer.disconnect();
         }
       },
-      { rootMargin: '900px' } // start looking up posters well before the card scrolls into view
+      { rootMargin: '1600px' } // start looking up posters well before the card scrolls into view
     );
     observer.observe(node);
 
@@ -75,6 +75,10 @@ const MediaPosterCardComponent: React.FC<MediaPosterCardProps> = ({
     setImgFailed(false);
 
     if (!isVisible || isPureFolder) return;
+    if (meta?.found) {
+      onMetadataLoaded?.(item.id, meta); // already known from the cache: nothing to fetch
+      return;
+    }
 
     fetchItemMetadata(item).then((res) => {
       if (cancelled || !res) return;
@@ -145,7 +149,6 @@ const MediaPosterCardComponent: React.FC<MediaPosterCardProps> = ({
             src={posterUrl}
             alt={item.cleanTitle}
             referrerPolicy="no-referrer"
-            loading="lazy"
             decoding="async"
             onError={() => setImgFailed(true)}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"

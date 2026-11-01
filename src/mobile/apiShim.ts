@@ -182,7 +182,7 @@ const metadataCache = new Map<string, unknown>();
 
 async function getJson(url: string, headers?: Record<string, string>): Promise<any | null> {
   try {
-    const r = await http(url, { headers, timeoutMs: 6000 });
+    const r = await http(url, { headers, timeoutMs: 3500 });
     if (r.status >= 400) return null;
     return JSON.parse(r.text);
   } catch {
@@ -210,18 +210,27 @@ async function metadata(title: string, kind: string, year?: number): Promise<unk
   let plot: string | undefined;
   let runtime: string | undefined;
 
-  const imdbData = await getJson(`https://v3.sg.media-imdb.com/suggestion/${firstChar}/${imdbSlug}.json`, {
-    'User-Agent': 'Mozilla/5.0',
-    Accept: 'application/json',
-  });
+  const isSeriesKind = kind === 'series' || kind === 'episode';
+  // IMDb, TVMaze and iTunes are asked AT THE SAME TIME
+  const [imdbData, tvData, itunesData] = await Promise.all([
+    getJson(`https://v3.sg.media-imdb.com/suggestion/${firstChar}/${imdbSlug}.json`, {
+      'User-Agent': 'Mozilla/5.0',
+      Accept: 'application/json',
+    }),
+    isSeriesKind ? getJson(`https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(title)}`) : Promise.resolve(null),
+    getJson(
+      `https://itunes.apple.com/search?term=${encodeURIComponent(year ? `${title} ${year}` : title)}&entity=${
+        kind === 'series' ? 'tvSeason' : 'movie'
+      }&limit=3`
+    ),
+  ]);
+
   if (imdbData) {
     const candidates: any[] = Array.isArray(imdbData?.d) ? imdbData.d : [];
     let best = candidates.find((c) => c.i?.imageUrl && year && c.y && Math.abs(Number(c.y) - year) <= 1);
     if (!best) {
       best = candidates.find(
-        (c) =>
-          c.i?.imageUrl &&
-          (c.qid === 'movie' || c.qid === 'tvSeries' || c.qid === 'tvMiniSeries' || c.q)
+        (c) => c.i?.imageUrl && (c.qid === 'movie' || c.qid === 'tvSeries' || c.qid === 'tvMiniSeries' || c.q)
       );
     }
     if (!best && candidates.length > 0) best = candidates[0];
@@ -235,46 +244,62 @@ async function metadata(title: string, kind: string, year?: number): Promise<unk
     }
   }
 
-  if (kind === 'series' || kind === 'episode') {
-    const tv = await getJson(`https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(title)}`);
-    if (tv) {
-      if (!posterUrl && tv.image?.original) posterUrl = tv.image.original;
-      if (tv.rating?.average) imdbRating = String(tv.rating.average);
-      if (Array.isArray(tv.genres)) genres = tv.genres.slice(0, 3);
-      if (tv.summary) plot = String(tv.summary).replace(/<[^>]+>/g, '').trim();
-      if (tv.premiered && !resolvedYear) resolvedYear = parseInt(String(tv.premiered).slice(0, 4), 10);
-    }
+  if (tvData) {
+    if (!posterUrl && tvData.image?.original) posterUrl = tvData.image.original;
+    if (tvData.rating?.average) imdbRating = String(tvData.rating.average);
+    if (Array.isArray(tvData.genres)) genres = tvData.genres.slice(0, 3);
+    if (tvData.summary) plot = String(tvData.summary).replace(/<[^>]+>/g, '').trim();
+    if (tvData.premiered && !resolvedYear) resolvedYear = parseInt(String(tvData.premiered).slice(0, 4), 10);
   }
 
-  if (!plot || !posterUrl) {
-    const itunesTerm = year ? `${title} ${year}` : title;
-    const entity = kind === 'series' ? 'tvSeason' : 'movie';
-    const it = await getJson(
-      `https://itunes.apple.com/search?term=${encodeURIComponent(itunesTerm)}&entity=${entity}&limit=3`
-    );
-    const results: any[] = Array.isArray(it?.results) ? it.results : [];
+  {
+    const results: any[] = Array.isArray(itunesData?.results) ? itunesData.results : [];
     const match =
       results.find(
-        (r) =>
-          year &&
-          r.releaseDate &&
-          Math.abs(parseInt(String(r.releaseDate).slice(0, 4), 10) - year) <= 1
+        (r) => year && r.releaseDate && Math.abs(parseInt(String(r.releaseDate).slice(0, 4), 10) - year) <= 1
       ) || results[0];
     if (match) {
-      if (!posterUrl && match.artworkUrl100) {
-        posterUrl = String(match.artworkUrl100).replace('100x100bb', '600x900bb');
-      }
-      if (match.artworkUrl100) {
-        backdropUrl = String(match.artworkUrl100).replace('100x100bb', '1200x675bb');
-      }
-      if (!plot && (match.longDescription || match.shortDescription)) {
-        plot = match.longDescription || match.shortDescription;
-      }
+      if (!posterUrl && match.artworkUrl100) posterUrl = String(match.artworkUrl100).replace('100x100bb', '600x900bb');
+      if (match.artworkUrl100) backdropUrl = String(match.artworkUrl100).replace('100x100bb', '1200x675bb');
+      if (!plot && (match.longDescription || match.shortDescription)) plot = match.longDescription || match.shortDescription;
       if (genres.length === 0 && match.primaryGenreName) genres = [match.primaryGenreName];
       if (match.trackTimeMillis) {
         const mins = Math.round(Number(match.trackTimeMillis) / 60000);
         if (mins > 0) runtime = `${mins} min`;
       }
+    }
+  }
+
+  // Last resort when IMDb/iTunes found no picture: shorter title on IMDb + Wikipedia page image
+  if (!posterUrl) {
+    const shortTitle = title.split(/\s[-:\u2013]\s|:/)[0].trim();
+    const q2 = (shortTitle.length >= 2 ? shortTitle : title)
+      .toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const [imdb2, wiki] = await Promise.all([
+      q2 && q2 !== cleanQuery
+        ? getJson(`https://v3.sg.media-imdb.com/suggestion/${q2[0]}/${encodeURIComponent(q2.slice(0, 40))}.json`, {
+            'User-Agent': 'Mozilla/5.0',
+            Accept: 'application/json',
+          })
+        : Promise.resolve(null),
+      getJson(
+        `https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=1&prop=pageimages|extracts&piprop=thumbnail&pithumbsize=500&exintro=1&explaintext=1&exsentences=3&gsrsearch=${encodeURIComponent(
+          `${title} ${year || ''} ${isSeriesKind ? 'television series' : 'film'}`
+        )}`
+      ),
+    ]);
+    const c2 = (Array.isArray(imdb2?.d) ? imdb2.d : []).find((c: any) => c.i?.imageUrl);
+    if (c2) {
+      imdbId = imdbId || c2.id;
+      if (c2.y && !resolvedYear) resolvedYear = Number(c2.y);
+      if (c2.s && !cast) cast = String(c2.s);
+      posterUrl = String(c2.i.imageUrl).replace(/\._V1_.*\.jpg$/i, '._V1_SX600.jpg');
+    }
+    const wikiPage: any = wiki?.query?.pages ? Object.values(wiki.query.pages)[0] : null;
+    const firstWord = q2.split(' ')[0] || '';
+    if (wikiPage && firstWord && String(wikiPage.title || '').toLowerCase().includes(firstWord)) {
+      if (!posterUrl && wikiPage.thumbnail?.source) posterUrl = wikiPage.thumbnail.source;
+      if (!plot && wikiPage.extract) plot = String(wikiPage.extract).trim();
     }
   }
 
@@ -290,7 +315,7 @@ async function metadata(title: string, kind: string, year?: number): Promise<unk
     plot,
     runtime,
   };
-  metadataCache.set(cacheKey, payload);
+  if (payload.found) metadataCache.set(cacheKey, payload);
   return payload;
 }
 

@@ -1866,6 +1866,39 @@ app.get(['/api/metadata', '/metadata'], async (req, res) => {
       }
     }
 
+
+    // Last resort when IMDb/iTunes found no picture: shorter title on IMDb + Wikipedia page image
+    if (!posterUrl) {
+      const shortTitle = title.split(/\s[-:\u2013]\s|:/)[0].trim();
+      const q2 = (shortTitle.length >= 2 ? shortTitle : title)
+        .toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+      const [imdb2, wiki] = await Promise.all([
+        q2 && q2 !== cleanQuery
+          ? getJson(`https://v3.sg.media-imdb.com/suggestion/${q2[0]}/${encodeURIComponent(q2.slice(0, 40))}.json`, {
+              'User-Agent': 'Mozilla/5.0',
+              Accept: 'application/json',
+            })
+          : Promise.resolve(null),
+        getJson(
+          `https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=1&prop=pageimages|extracts&piprop=thumbnail&pithumbsize=500&exintro=1&explaintext=1&exsentences=3&gsrsearch=${encodeURIComponent(
+            `${title} ${year || ''} ${isSeriesKind ? 'television series' : 'film'}`
+          )}`
+        ),
+      ]);
+      const c2 = (Array.isArray(imdb2?.d) ? imdb2.d : []).find((c: any) => c.i?.imageUrl);
+      if (c2) {
+        imdbId = imdbId || c2.id;
+        if (c2.y && !resolvedYear) resolvedYear = Number(c2.y);
+        if (c2.s && !cast) cast = String(c2.s);
+        posterUrl = String(c2.i.imageUrl).replace(/\._V1_.*\.jpg$/i, '._V1_SX600.jpg');
+      }
+      const wikiPage: any = wiki?.query?.pages ? Object.values(wiki.query.pages)[0] : null;
+      const firstWord = q2.split(' ')[0] || '';
+      if (wikiPage && firstWord && String(wikiPage.title || '').toLowerCase().includes(firstWord)) {
+        if (!posterUrl && wikiPage.thumbnail?.source) posterUrl = wikiPage.thumbnail.source;
+        if (!plot && wikiPage.extract) plot = String(wikiPage.extract).trim();
+      }
+    }
     const payload = {
       found: Boolean(posterUrl || plot || cast),
       posterUrl,

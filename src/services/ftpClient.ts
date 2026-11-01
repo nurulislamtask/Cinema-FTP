@@ -500,9 +500,10 @@ export function saveCachedPlayableUrl(idOrUrl: string, streamUrl: string) {
 
 // Concurrency control for metadata fetching (poster lookups).
 // 14 at once, and the NEWEST request goes first: that is the card that just scrolled into view.
-const META_MAX_PARALLEL = 14;
+const META_MAX_PARALLEL = 24;
 let activeMetaFetches = 0;
 const metaFetchQueue: (() => void)[] = [];
+const missedMeta = new Map<string, number>();
 const inFlightMetaRequests = new Map<string, Promise<EnrichedMetadata | null>>();
 
 function releaseMetaSlot() {
@@ -799,6 +800,14 @@ export async function browseDirectoryWithDeepScan(
   };
 }
 
+/** Instant (synchronous) lookup of already-known poster data, so cards paint with their picture on the first frame. */
+export function peekItemMetadata(item: ParsedFtpItem): EnrichedMetadata | null {
+  if (item.mediaKind !== 'movie' && item.mediaKind !== 'series' && item.mediaKind !== 'episode') return null;
+  const t = item.cleanTitle.trim();
+  if (!t) return null;
+  return localMetaCache.get(`${t.toLowerCase()}|${item.year || ''}|${item.mediaKind}`) || null;
+}
+
 export async function fetchItemMetadata(
   item: ParsedFtpItem
 ): Promise<EnrichedMetadata | null> {
@@ -817,6 +826,8 @@ export async function fetchItemMetadata(
   if (localMetaCache.has(cacheKey)) {
     return localMetaCache.get(cacheKey)!;
   }
+  const missedAt = missedMeta.get(cacheKey);
+  if (missedAt && Date.now() - missedAt < 5 * 60 * 1000) return null;
 
   // In-flight deduplication
   if (inFlightMetaRequests.has(cacheKey)) {
@@ -835,8 +846,18 @@ export async function fetchItemMetadata(
       const res = await fetch(`/api/metadata?${params.toString()}`);
       if (!res.ok) return null;
       const data: EnrichedMetadata = await res.json();
-      localMetaCache.set(cacheKey, data);
-      saveMetaCache();
+      if (data && data.found) {
+        localMetaCache.set(cacheKey, data);
+        saveMetaCache();
+        // download the picture right away so the card shows it instantly
+        if (data.posterUrl && typeof Image !== 'undefined') {
+          const im = new Image();
+          im.referrerPolicy = 'no-referrer';
+          im.src = data.posterUrl.replace(/_V1_SX600\.jpg$/i, '_V1_SX340.jpg').replace('600x900bb', '340x510bb');
+        }
+      } else {
+        missedMeta.set(cacheKey, Date.now()); // nothing found: do not hammer the servers, retry later
+      }
       return data;
     } catch {
       return null;

@@ -44,6 +44,11 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git tag "v${{ needs.version.outputs.v }}"
           git push origin "v${{ needs.version.outputs.v }}"
+      - name: Create the release (so uploads never create duplicates)
+        shell: bash
+        run: gh release create "v${{ needs.version.outputs.v }}" --title "CineFTP ${{ needs.version.outputs.v }}" --notes "Windows installer (auto-updates) and Android APK." --verify-tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build + publish installer (creates the GitHub release v${{ needs.version.outputs.v }})
         shell: bash
         run: |
