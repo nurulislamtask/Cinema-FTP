@@ -49,10 +49,10 @@ jobs:
           {
             echo "--- token diagnostics ---"
             echo "secret length: ${#RELEASES_TOKEN}"
-            GH_TOKEN="$RELEASES_TOKEN" gh api -i repos/nurulislamtask/CineFTP-Releases 2>&1 | grep -iE "^HTTP|x-oauth-scopes|x-accepted|\"(push|admin|pull)\"|\"private\"|\"message\"" | head -12
-            GH_TOKEN="$RELEASES_TOKEN" gh api -i repos/nurulislamtask/CineFTP-Releases/contents/README.md 2>&1 | grep -iE "^HTTP|x-accepted|\"message\"" | head -4
+            GH_TOKEN="$RELEASES_TOKEN" gh api -i repos/nurulislamtask/CineFTP-Releases 2>&1 | grep -iE "^HTTP|x-oauth-scopes|x-accepted|\"(push|admin|pull)\"|\"private\"|\"message\"" | head -12 || true
+            GH_TOKEN="$RELEASES_TOKEN" gh api -i repos/nurulislamtask/CineFTP-Releases/contents/README.md 2>&1 | grep -iE "^HTTP|x-accepted|\"message\"" | head -4 || true
             echo "--- end diagnostics ---"
-          } 2>&1 | tee build.log
+          } 2>&1 | tee build.log || true
           if [ -n "$RELEASES_TOKEN" ] && GH_TOKEN="$RELEASES_TOKEN" gh release create "$V" --repo nurulislamtask/CineFTP-Releases --title "CineFTP ${{ needs.version.outputs.v }}" --notes "Windows installer (auto-updates) and Android APK." 2>&1 | tee build.log; then
             echo "repo=CineFTP-Releases" >> "$GITHUB_OUTPUT"
           else
