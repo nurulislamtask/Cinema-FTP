@@ -20,3 +20,4 @@ export const ABOUT = {
     { label: 'Email', url: '' }, // e.g. mailto:you@example.com
   ],
 };
+// build trigger 1793548935
