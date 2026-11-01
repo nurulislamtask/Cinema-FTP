@@ -1,6 +1,15 @@
 package com.cineftp.mobile;
 
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.Uri;
+import android.os.Environment;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
+import java.io.File;
 import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -41,5 +50,49 @@ public class NativePlayerPlugin extends Plugin {
         String error = data != null ? data.getStringExtra("error") : null;
         if (error != null) out.put("error", error);
         call.resolve(out);
+    }
+
+    /** Downloads the new APK (with a system download notification) and opens the Android installer when done. */
+    @PluginMethod
+    public void installUpdate(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null || url.isEmpty()) {
+            call.reject("No url");
+            return;
+        }
+        try {
+            final Context ctx = getContext();
+            File dir = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            final File apk = new File(dir, "CineFTP-update.apk");
+            if (apk.exists()) apk.delete();
+
+            final DownloadManager dm = (DownloadManager) ctx.getSystemService(Context.DOWNLOAD_SERVICE);
+            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url))
+                .setTitle("CineFTP update")
+                .setDescription("Downloading the new version")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalFilesDir(ctx, Environment.DIRECTORY_DOWNLOADS, "CineFTP-update.apk");
+            final long id = dm.enqueue(req);
+
+            BroadcastReceiver done = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context c, Intent i) {
+                    if (i.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != id) return;
+                    try { c.unregisterReceiver(this); } catch (Exception ignored) {}
+                    try {
+                        Uri uri = FileProvider.getUriForFile(c, c.getPackageName() + ".fileprovider", apk);
+                        Intent install = new Intent(Intent.ACTION_VIEW)
+                            .setDataAndType(uri, "application/vnd.android.package-archive")
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                        c.startActivity(install);
+                    } catch (Exception ignored) {}
+                }
+            };
+            ContextCompat.registerReceiver(ctx, done,
+                new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), ContextCompat.RECEIVER_EXPORTED);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(String.valueOf(e.getMessage()));
+        }
     }
 }

@@ -6,6 +6,7 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    define: { __APP_VERSION__: JSON.stringify(process.env.APP_VERSION || '0.0.0') },
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),

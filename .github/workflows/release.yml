@@ -90,8 +90,13 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       - run: npx vite build
+        env:
+          APP_VERSION: ${{ needs.version.outputs.v }}
       - run: npx cap add android
       - run: pip install pillow && python scripts/android-prepare.py
+        env:
+          APP_VERSION: ${{ needs.version.outputs.v }}
+          APP_VERSION_CODE: ${{ github.run_number }}
       - run: npx cap sync android
       - name: Build APK
         working-directory: android

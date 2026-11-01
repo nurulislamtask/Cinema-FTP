@@ -91,5 +91,40 @@ if os.path.exists(props):
     if 'suppressUnsupportedCompileSdk' not in t:
         t += '\nandroid.suppressUnsupportedCompileSdk=36\n'
     open(props, 'w', encoding='utf8').write(t)
+
+# 5) stable signing key (updates only install over the old app when the signature is the same) + version numbers
+shutil.copyfile(os.path.join(root, 'android-native', 'cineftp.keystore'),
+                os.path.join(root, 'android', 'app', 'cineftp.keystore'))
+ver = os.environ.get('APP_VERSION', '1.0.0')
+code = os.environ.get('APP_VERSION_CODE', '1')
+g = open(app_gradle, encoding='utf8').read()
+if 'cineftp.keystore' not in g:
+    g += """
+
+android {
+    signingConfigs {
+        cineftp {
+            storeFile file('cineftp.keystore')
+            storePassword 'cineftp123'
+            keyAlias 'cineftp'
+            keyPassword 'cineftp123'
+        }
+    }
+    defaultConfig {
+        versionCode %s
+        versionName '%s'
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.cineftp }
+        release { signingConfig signingConfigs.cineftp }
+    }
+}
+""" % (code, ver)
+    open(app_gradle, 'w', encoding='utf8').write(g)
+
+m = open(manifest, encoding='utf8').read()
+if 'REQUEST_INSTALL_PACKAGES' not in m:
+    m = m.replace('<application', '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application', 1)
+    open(manifest, 'w', encoding='utf8').write(m)
 print('native player installed')
 print('android prepared')

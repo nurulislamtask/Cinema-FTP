@@ -17,6 +17,7 @@ import { CatalogView } from './components/CatalogView';
 import { MediaDetailView } from './components/MediaDetailView';
 import { SettingsView } from './components/SettingsView';
 import { CinemaPlayer } from './components/PlayerEntry';
+import { AppUpdatePrompt } from './components/AppUpdatePrompt';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 
@@ -942,6 +943,8 @@ export default function App() {
           watchlistCount={watchlist.length}
         />
       </main>
+
+      <AppUpdatePrompt />
 
       {/* Fullscreen Multi-Audio Cinema Player */}
       {activePlayerState && (
