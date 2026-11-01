@@ -52,4 +52,44 @@ colors = os.path.join(res, 'values', 'colors.xml')
 open(colors, 'w', encoding='utf8').write(
     '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="colorPrimary">#090A0F</color>\n'
     '    <color name="colorPrimaryDark">#090A0F</color>\n    <color name="colorAccent">#E50914</color>\n</resources>\n')
+
+# 4) native video player (ExoPlayer / media3): Java sources, activity, gradle dependencies
+import shutil
+MEDIA3 = '1.9.0'
+java_dir = os.path.join(root, 'android', 'app', 'src', 'main', 'java', 'com', 'cineftp', 'mobile')
+os.makedirs(java_dir, exist_ok=True)
+for f in ('MainActivity.java', 'NativePlayerPlugin.java', 'PlayerActivity.java'):
+    shutil.copyfile(os.path.join(root, 'android-native', 'java', f), os.path.join(java_dir, f))
+
+m = open(manifest, encoding='utf8').read()
+if 'PlayerActivity' not in m:
+    act = ('<activity android:name=".PlayerActivity" android:exported="false" '
+           'android:theme="@style/Theme.AppCompat.NoActionBar" '
+           'android:screenOrientation="sensorLandscape" '
+           'android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density" />')
+    m = m.replace('</application>', '    ' + act + '\n    </application>', 1)
+open(manifest, 'w', encoding='utf8').write(m)
+
+app_gradle = os.path.join(root, 'android', 'app', 'build.gradle')
+g = open(app_gradle, encoding='utf8').read()
+if 'media3-exoplayer' not in g:
+    deps = ('    implementation "androidx.media3:media3-exoplayer:%s"\n'
+            '    implementation "androidx.media3:media3-ui:%s"\n'
+            '    implementation "org.jellyfin.media3:media3-ffmpeg-decoder:%s+1"\n') % (MEDIA3, MEDIA3, MEDIA3)
+    g = re.sub(r'dependencies\s*\{', lambda mo: mo.group(0) + '\n' + deps, g, count=1)
+    open(app_gradle, 'w', encoding='utf8').write(g)
+
+vars_gradle = os.path.join(root, 'android', 'variables.gradle')
+if os.path.exists(vars_gradle):
+    v = open(vars_gradle, encoding='utf8').read()
+    v = re.sub(r'compileSdkVersion\s*=\s*\d+', 'compileSdkVersion = 36', v)
+    open(vars_gradle, 'w', encoding='utf8').write(v)
+# media3 needs a newer Android Gradle plugin than the Capacitor template ships: allow the newer compileSdk
+props = os.path.join(root, 'android', 'gradle.properties')
+if os.path.exists(props):
+    t = open(props, encoding='utf8').read()
+    if 'suppressUnsupportedCompileSdk' not in t:
+        t += '\nandroid.suppressUnsupportedCompileSdk=36\n'
+    open(props, 'w', encoding='utf8').write(t)
+print('native player installed')
 print('android prepared')

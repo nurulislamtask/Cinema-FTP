@@ -41,7 +41,7 @@ import {
   fetchItemMetadata,
 } from '../services/ftpClient';
 
-interface CinemaPlayerProps {
+export interface CinemaPlayerProps {
   video: ParsedFtpItem;
   playlist: ParsedFtpItem[];
   subtitles: ParsedFtpItem[];
@@ -78,7 +78,7 @@ function parseRuntimeToSeconds(runtime?: string): number {
   return 0;
 }
 
-export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
+export const CinemaPlayerWeb: React.FC<CinemaPlayerProps> = ({
   video,
   playlist,
   subtitles,

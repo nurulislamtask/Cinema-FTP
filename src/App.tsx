@@ -16,7 +16,7 @@ import { TopBar } from './components/TopBar';
 import { CatalogView } from './components/CatalogView';
 import { MediaDetailView } from './components/MediaDetailView';
 import { SettingsView } from './components/SettingsView';
-import { CinemaPlayer } from './components/CinemaPlayer';
+import { CinemaPlayer } from './components/PlayerEntry';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 
