@@ -41,7 +41,10 @@ jobs:
           APP_VERSION: ${{ needs.version.outputs.v }}
       - name: Create the release (so uploads never create duplicates)
         shell: bash
-        run: gh release create "v${{ needs.version.outputs.v }}" --repo nurulislamtask/CineFTP-Releases --title "CineFTP ${{ needs.version.outputs.v }}" --notes "Windows installer (auto-updates) and Android APK."
+        run: |
+          set -o pipefail
+          if [ -z "$GH_TOKEN" ]; then echo "RELEASES_TOKEN secret is EMPTY or missing" | tee build.log; exit 1; fi
+          gh release create "v${{ needs.version.outputs.v }}" --repo nurulislamtask/CineFTP-Releases --title "CineFTP ${{ needs.version.outputs.v }}" --notes "Windows installer (auto-updates) and Android APK." 2>&1 | tee build.log
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
       - name: Build + publish installer (creates the GitHub release v${{ needs.version.outputs.v }})
