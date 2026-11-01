@@ -35,6 +35,7 @@ const MediaPosterCardComponent: React.FC<MediaPosterCardProps> = ({
   const [meta, setMeta] = useState<EnrichedMetadata | null>(() => peekItemMetadata(item));
   const [imgFailed, setImgFailed] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [retry, setRetry] = useState(0);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
   const isPureFolder =
@@ -80,18 +81,23 @@ const MediaPosterCardComponent: React.FC<MediaPosterCardProps> = ({
       return;
     }
 
+    let timer: number | undefined;
     fetchItemMetadata(item).then((res) => {
-      if (cancelled || !res) return;
-      setMeta(res);
-      if (onMetadataLoaded && res.found) {
+      if (cancelled) return;
+      if (res) setMeta(res);
+      if (onMetadataLoaded && res?.found) {
         onMetadataLoaded(item.id, res);
+      } else if (retry < 2) {
+        // still no picture (slow network / busy servers): try again a little later, twice at most
+        timer = window.setTimeout(() => !cancelled && setRetry((r) => r + 1), 6000 + retry * 6000);
       }
     });
 
     return () => {
       cancelled = true;
+      if (timer) window.clearTimeout(timer);
     };
-  }, [isVisible, item.id, item.cleanTitle, item.year, item.mediaKind, isPureFolder]);
+  }, [isVisible, item.id, item.cleanTitle, item.year, item.mediaKind, isPureFolder, retry]);
 
   const fullPosterUrl = !imgFailed ? meta?.posterUrl || item.posterUrl : undefined;
   // The grid only needs a small picture (about 1/3 of the download): IMDb SX600 -> SX340, iTunes 600x900 -> 340x510

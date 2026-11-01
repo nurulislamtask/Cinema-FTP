@@ -500,7 +500,7 @@ export function saveCachedPlayableUrl(idOrUrl: string, streamUrl: string) {
 
 // Concurrency control for metadata fetching (poster lookups).
 // 14 at once, and the NEWEST request goes first: that is the card that just scrolled into view.
-const META_MAX_PARALLEL = 24;
+const META_MAX_PARALLEL = 12; // more at once made phones time out and lose posters
 let activeMetaFetches = 0;
 const metaFetchQueue: (() => void)[] = [];
 const missedMeta = new Map<string, number>();
@@ -827,7 +827,7 @@ export async function fetchItemMetadata(
     return localMetaCache.get(cacheKey)!;
   }
   const missedAt = missedMeta.get(cacheKey);
-  if (missedAt && Date.now() - missedAt < 5 * 60 * 1000) return null;
+  if (missedAt && Date.now() - missedAt < 4000) return null;
 
   // In-flight deduplication
   if (inFlightMetaRequests.has(cacheKey)) {
@@ -843,9 +843,16 @@ export async function fetchItemMetadata(
       });
       if (item.year) params.set('year', String(item.year));
 
-      const res = await fetch(`/api/metadata?${params.toString()}`);
-      if (!res.ok) return null;
-      const data: EnrichedMetadata = await res.json();
+      // one automatic second try: the first one often fails only because many lookups ran at once
+      let data: EnrichedMetadata | null = null;
+      for (let attempt = 0; attempt < 2 && !(data && data.found); attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 1200));
+        try {
+          const res = await fetch(`/api/metadata?${params.toString()}`);
+          if (res.ok) data = await res.json();
+        } catch {}
+      }
+      if (!data) return null;
       if (data && data.found) {
         localMetaCache.set(cacheKey, data);
         saveMetaCache();

@@ -182,7 +182,7 @@ const metadataCache = new Map<string, unknown>();
 
 async function getJson(url: string, headers?: Record<string, string>): Promise<any | null> {
   try {
-    const r = await http(url, { headers, timeoutMs: 3500 });
+    const r = await http(url, { headers, timeoutMs: 7000 });
     if (r.status >= 400) return null;
     return JSON.parse(r.text);
   } catch {

@@ -37,7 +37,11 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo;
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
@@ -45,6 +49,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -85,6 +90,9 @@ public class PlayerActivity extends AppCompatActivity {
     };
     private final String[] RESIZE_LABEL = {"Fit", "Zoom", "Stretch"};
     private TextView aspectBtn;
+    private TextView decoderBtn;
+    private boolean softwareDecoders = false;
+    private List<MediaItem> allItems = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -139,6 +147,13 @@ public class PlayerActivity extends AppCompatActivity {
         tlp.leftMargin = dp(10);
         tlp.rightMargin = dp(10);
         topBar.addView(titleView, tlp);
+
+        decoderBtn = barButton("HW");
+        decoderBtn.setOnClickListener(v -> switchDecoder(!softwareDecoders));
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        dlp.rightMargin = dp(8);
+        topBar.addView(decoderBtn, dlp);
 
         aspectBtn = barButton(RESIZE_LABEL[0]);
         aspectBtn.setOnClickListener(v -> setResize((resizeIndex + 1) % RESIZE.length));
@@ -238,6 +253,23 @@ public class PlayerActivity extends AppCompatActivity {
             mediaItems.add(b.build());
         }
 
+        allItems = mediaItems;
+        createPlayer(false, startIndex, startPos);
+    }
+
+    /** Prefer the phone's own software video decoders (slower, but they work when the hardware decoder crashes). */
+    private static MediaCodecSelector softwareFirst() {
+        return (mime, secure, tunneling) -> {
+            List<MediaCodecInfo> list = new ArrayList<>(MediaCodecUtil.getDecoderInfos(mime, secure, tunneling));
+            Collections.sort(list, (x, y) -> Boolean.compare(!x.softwareOnly, !y.softwareOnly));
+            return list;
+        };
+    }
+
+    private void createPlayer(boolean software, int index, long positionMs) {
+        softwareDecoders = software;
+        if (decoderBtn != null) decoderBtn.setText(software ? "SW" : "HW");
+
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
@@ -248,27 +280,41 @@ public class PlayerActivity extends AppCompatActivity {
         DefaultRenderersFactory renderers = new DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true);
+        if (software) renderers.setMediaCodecSelector(softwareFirst());
 
         DefaultLoadControl load = new DefaultLoadControl.Builder()
             .setBufferDurationsMs(20000, 80000, 1500, 3000)
             .build();
 
-        player = new ExoPlayer.Builder(this, renderers)
-            .setMediaSourceFactory(new DefaultMediaSourceFactory(new DefaultDataSource.Factory(this, http)))
+        DefaultExtractorsFactory extractors = new DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true);
+
+        ExoPlayer np = new ExoPlayer.Builder(this, renderers)
+            .setMediaSourceFactory(new DefaultMediaSourceFactory(new DefaultDataSource.Factory(this, http), extractors))
             .setLoadControl(load)
             .setSeekBackIncrementMs(10000)
             .setSeekForwardIncrementMs(10000)
             .build();
-        playerView.setPlayer(player);
+        player = np;
+        playerView.setPlayer(np);
 
-        player.addListener(new Player.Listener() {
+        np.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {
+                int code = error.errorCode;
+                boolean decoderProblem = code == PlaybackException.ERROR_CODE_DECODING_FAILED
+                    || code == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
+                    || code == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED
+                    || code == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES;
+                if (decoderProblem && !softwareDecoders) {
+                    showHud("Switching to compatible decoder\u2026");
+                    switchDecoder(true);
+                    return;
+                }
                 Throwable c = error.getCause();
                 errorMessage = error.getErrorCodeName()
                     + (c != null ? " / " + c.getClass().getSimpleName() + ": " + c.getMessage()
                                  : (error.getMessage() != null ? " / " + error.getMessage() : ""));
-                // keep the screen and show the real reason (user can read it / send a screenshot), close with the X button
+                // keep the screen and show the real reason, close with the X button
                 topBar.setVisibility(View.VISIBLE);
                 showHudSticky("Cannot play this file\n" + errorMessage);
                 hudView.setTextSize(13f);
@@ -278,12 +324,34 @@ public class PlayerActivity extends AppCompatActivity {
             public void onMediaItemTransition(MediaItem item, int reason) {
                 updateTitle();
             }
+
+            @Override
+            public void onPlaybackStateChanged(int state) {
+                if (state == Player.STATE_READY && player != null && !player.isCurrentMediaItemSeekable()
+                        && !warnedUnseekable) {
+                    warnedUnseekable = true;
+                    showHud("This file has no seek index: jumping may not work");
+                }
+            }
         });
 
-        player.setMediaItems(mediaItems, startIndex, startPos);
-        player.prepare();
-        player.setPlayWhenReady(true);
+        np.setMediaItems(allItems, index, positionMs);
+        np.prepare();
+        np.setPlayWhenReady(true);
         updateTitle();
+    }
+
+    private boolean warnedUnseekable = false;
+
+    private void switchDecoder(boolean software) {
+        if (player == null) return;
+        int idx = player.getCurrentMediaItemIndex();
+        long pos = Math.max(0L, player.getCurrentPosition());
+        player.release();
+        errorMessage = null;
+        warnedUnseekable = false;
+        createPlayer(software, idx, pos);
+        showHud(software ? "Software decoder" : "Hardware decoder");
     }
 
     private void updateTitle() {

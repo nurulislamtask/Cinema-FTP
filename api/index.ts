@@ -1767,7 +1767,7 @@ app.get(['/api/metadata', '/metadata'], async (req, res) => {
     const firstChar = cleanQuery[0] || 'a';
     const imdbSlug = encodeURIComponent(cleanQuery.slice(0, 40));
     const isSeriesKind = kind === 'series' || kind === 'episode';
-    const TIMEOUT = 3500;
+    const TIMEOUT = 7000;
 
     const getJson = async (url: string, headers?: Record<string, string>): Promise<any | null> => {
       try {
