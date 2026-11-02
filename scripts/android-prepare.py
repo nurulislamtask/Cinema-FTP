@@ -58,7 +58,7 @@ import shutil
 MEDIA3 = '1.9.0'
 java_dir = os.path.join(root, 'android', 'app', 'src', 'main', 'java', 'com', 'cineftp', 'mobile')
 os.makedirs(java_dir, exist_ok=True)
-for f in ('MainActivity.java', 'NativePlayerPlugin.java', 'PlayerActivity.java'):
+for f in ('MainActivity.java', 'NativePlayerPlugin.java', 'PlayerActivity.java', 'SubtitleFinder.java'):
     shutil.copyfile(os.path.join(root, 'android-native', 'java', f), os.path.join(java_dir, f))
 
 m = open(manifest, encoding='utf8').read()
