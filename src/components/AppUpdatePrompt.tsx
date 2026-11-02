@@ -4,16 +4,31 @@ import { NativePlayer } from '../mobile/nativePlayer';
 
 const REPO = 'nurulislamtask/CineFTP-Releases';
 
-function num(v: string): number[] {
+export function num(v: string): number[] {
   return v.replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
 }
-function isNewer(a: string, b: string): boolean {
+export function isNewer(a: string, b: string): boolean {
   const x = num(a);
   const y = num(b);
   for (let i = 0; i < Math.max(x.length, y.length); i++) {
     if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
   }
   return false;
+}
+
+export async function fetchLatestRelease(): Promise<{ version: string; apk: string } | null> {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+    if (!r.ok) return null;
+    const rel = await r.json();
+    const apk = (rel.assets || []).find((a: any) => /\.apk$/i.test(a.name));
+    if (!apk) return null;
+    return { version: String(rel.tag_name || '').replace(/^v/i, ''), apk: apk.browser_download_url };
+  } catch {
+    return null;
+  }
 }
 
 /** Phone app: checks GitHub for a newer release and offers to download + install it. */

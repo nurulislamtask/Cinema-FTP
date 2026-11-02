@@ -3,6 +3,8 @@ import { ArrowLeft } from 'lucide-react';
 import { ParsedFtpItem } from '../utils/ftpParser';
 import type { CinemaPlayerProps } from './CinemaPlayer';
 import { NativePlayer, NativePlayerItem } from '../mobile/nativePlayer';
+import { displayTitle } from '../utils/titleClean';
+import { readPrefs } from '../mobile/prefs';
 import { resolvePlayableFromFolder, getCachedPlayableUrl, saveCachedPlayableUrl } from '../services/ftpClient';
 
 const DIRECT_VIDEO = /\.(mp4|mkv|webm|avi|mov|ts|m4v|m2ts|wmv|flv)(\?.*)?$/i;
@@ -33,6 +35,15 @@ function savePosition(id: string, t: number, d: number) {
     if (keys.length > 600) keys.slice(0, keys.length - 600).forEach((k) => delete all[k]);
     localStorage.setItem(POS_KEY, JSON.stringify(all));
   } catch {}
+}
+
+function metaOf(p: ParsedFtpItem) {
+  return {
+    query: displayTitle(p.cleanTitle || p.rawName),
+    year: p.year,
+    season: p.episode !== undefined ? p.season ?? 1 : undefined,
+    episode: p.episode,
+  };
 }
 
 /** Opens the native phone player for the chosen video, then closes this screen when the user leaves it. */
@@ -79,27 +90,28 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
           if (p.id === video.id) {
             queue.push({
               id: p.id,
-              item: { url: safeUrl(url), title: p.cleanTitle || p.rawName, subtitles: toSub(subtitles || []) },
+              item: { url: safeUrl(url), title: p.cleanTitle || p.rawName, ...metaOf(p), subtitles: toSub(subtitles || []) },
             });
           } else if (!p.isDirectory && DIRECT_VIDEO.test(p.url)) {
             const re = epRegex(p.episode);
             const subs = re ? (subtitles || []).filter((s) => re.test(s.rawName)) : [];
-            queue.push({ id: p.id, item: { url: safeUrl(p.url), title: p.cleanTitle || p.rawName, subtitles: toSub(subs) } });
+            queue.push({ id: p.id, item: { url: safeUrl(p.url), title: p.cleanTitle || p.rawName, ...metaOf(p), subtitles: toSub(subs) } });
           }
         }
         if (!queue.some((q) => q.id === video.id)) {
           queue.splice(0, queue.length, {
             id: video.id,
-            item: { url: safeUrl(url), title: video.cleanTitle || video.rawName, subtitles: toSub(subtitles || []) },
+            item: { url: safeUrl(url), title: video.cleanTitle || video.rawName, ...metaOf(video), subtitles: toSub(subtitles || []) },
           });
         }
         const index = Math.max(0, queue.findIndex((q) => q.id === video.id));
 
         const saved = readPositions()[video.id];
-        const startAt = initialStartTime > 0 ? initialStartTime : saved ? saved.t : 0;
+        const prefs = readPrefs();
+        const startAt = initialStartTime > 0 ? initialStartTime : saved && prefs.resumePlayback ? saved.t : 0;
 
         setStatus('Starting…');
-        const res = await NativePlayer.play({ items: queue.map((q) => q.item), index, position: startAt });
+        const res = await NativePlayer.play({ items: queue.map((q) => q.item), index, position: startAt, software: prefs.softwareDecoder });
         if (!alive) return;
 
         const playedId = queue[Math.min(res.index, queue.length - 1)]?.id || video.id;

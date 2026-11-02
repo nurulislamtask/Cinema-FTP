@@ -7,6 +7,7 @@ import {
   isSeasonFolderName,
 } from '../utils/ftpParser';
 import { INITIAL_UNIFIED_CATALOG } from '../utils/seedData';
+import { normalizeLookupTitle } from '../utils/titleClean';
 
 const LOCAL_BRIDGE_BASE = 'http://127.0.0.1:7788';
 const META_STORAGE_KEY = 'cineftp_meta_cache_v1';
@@ -803,9 +804,9 @@ export async function browseDirectoryWithDeepScan(
 /** Instant (synchronous) lookup of already-known poster data, so cards paint with their picture on the first frame. */
 export function peekItemMetadata(item: ParsedFtpItem): EnrichedMetadata | null {
   if (item.mediaKind !== 'movie' && item.mediaKind !== 'series' && item.mediaKind !== 'episode') return null;
-  const t = item.cleanTitle.trim();
-  if (!t) return null;
-  return localMetaCache.get(`${t.toLowerCase()}|${item.year || ''}|${item.mediaKind}`) || null;
+  const n = normalizeLookupTitle(item.cleanTitle, item.year);
+  if (!n.title) return null;
+  return localMetaCache.get(`${n.title.toLowerCase()}|${n.year || ''}|${item.mediaKind}`) || null;
 }
 
 export async function fetchItemMetadata(
@@ -819,10 +820,11 @@ export async function fetchItemMetadata(
     return null;
   }
 
-  const cleanTitle = item.cleanTitle.trim();
+  const norm = normalizeLookupTitle(item.cleanTitle, item.year);
+  const cleanTitle = norm.title;
   if (!cleanTitle || cleanTitle.length < 2) return null;
 
-  const cacheKey = `${cleanTitle.toLowerCase()}|${item.year || ''}|${item.mediaKind}`;
+  const cacheKey = `${cleanTitle.toLowerCase()}|${norm.year || ''}|${item.mediaKind}`;
   if (localMetaCache.has(cacheKey)) {
     return localMetaCache.get(cacheKey)!;
   }
@@ -841,7 +843,7 @@ export async function fetchItemMetadata(
         title: cleanTitle,
         kind: item.mediaKind,
       });
-      if (item.year) params.set('year', String(item.year));
+      if (norm.year) params.set('year', String(norm.year));
 
       // one automatic second try: the first one often fails only because many lookups ran at once
       let data: EnrichedMetadata | null = null;

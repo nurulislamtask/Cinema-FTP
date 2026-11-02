@@ -21,12 +21,16 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.Toast;
+import androidx.appcompat.app.AlertDialog;
+import java.io.File;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.MimeTypes;
@@ -91,8 +95,14 @@ public class PlayerActivity extends AppCompatActivity {
     private final String[] RESIZE_LABEL = {"Fit", "Zoom", "Stretch"};
     private TextView aspectBtn;
     private TextView decoderBtn;
+    private TextView subsBtn;
+    private String[] qTitle = new String[0];
+    private int[] qYear = new int[0];
+    private int[] qSeason = new int[0];
+    private int[] qEpisode = new int[0];
     private boolean softwareDecoders = false;
     private boolean ffmpegAudio = true;
+    private final StringBuilder errorHistory = new StringBuilder();
     private int ladder = 0; // automatic recovery step (decoder combinations tried so far)
     private List<MediaItem> allItems = new ArrayList<>();
 
@@ -149,6 +159,20 @@ public class PlayerActivity extends AppCompatActivity {
         tlp.leftMargin = dp(10);
         tlp.rightMargin = dp(10);
         topBar.addView(titleView, tlp);
+
+        subsBtn = barButton("Subs");
+        subsBtn.setOnClickListener(v -> openSubtitleSearch());
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        slp.rightMargin = dp(8);
+        topBar.addView(subsBtn, slp);
+
+        TextView openWith = barButton("Open with");
+        openWith.setOnClickListener(v -> openWithOtherPlayer());
+        LinearLayout.LayoutParams olp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        olp.rightMargin = dp(8);
+        topBar.addView(openWith, olp);
 
         decoderBtn = barButton("HW");
         decoderBtn.setOnClickListener(v -> switchDecoder(!softwareDecoders));
@@ -230,8 +254,16 @@ public class PlayerActivity extends AppCompatActivity {
         long startPos = Math.max(0L, in.getLongExtra("position", 0L));
 
         List<MediaItem> mediaItems = new ArrayList<>();
+        qTitle = new String[items.length()];
+        qYear = new int[items.length()];
+        qSeason = new int[items.length()];
+        qEpisode = new int[items.length()];
         for (int i = 0; i < items.length(); i++) {
             JSONObject o = items.getJSONObject(i);
+            qTitle[i] = o.optString("query", o.optString("title", ""));
+            qYear[i] = o.optInt("year", 0);
+            qSeason[i] = o.optInt("season", 0);
+            qEpisode[i] = o.optInt("episode", 0);
             MediaItem.Builder b = new MediaItem.Builder()
                 .setUri(Uri.parse(o.getString("url")))
                 .setMediaMetadata(new MediaMetadata.Builder().setTitle(o.optString("title", "")).build());
@@ -256,7 +288,7 @@ public class PlayerActivity extends AppCompatActivity {
         }
 
         allItems = mediaItems;
-        createPlayer(false, startIndex, startPos);
+        createPlayer(in.getBooleanExtra("software", false), startIndex, startPos);
     }
 
     /** Prefer the phone's own software video decoders (slower, but they work when the hardware decoder crashes). */
@@ -305,6 +337,7 @@ public class PlayerActivity extends AppCompatActivity {
             @Override
             public void onPlayerError(PlaybackException error) {
                 int code = error.errorCode;
+                errorHistory.append("\n#").append(ladder).append(" ").append(error.getErrorCodeName());
                 boolean recoverable = code == PlaybackException.ERROR_CODE_DECODING_FAILED
                     || code == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
                     || code == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED
@@ -334,7 +367,7 @@ public class PlayerActivity extends AppCompatActivity {
                 errorMessage = error.getErrorCodeName()
                     + (c != null ? " / " + c.getClass().getSimpleName() + ": " + c.getMessage()
                                  : (error.getMessage() != null ? " / " + error.getMessage() : ""))
-                    + where;
+                    + where + "\n\nTried:" + errorHistory;
                 // keep the screen and show the real reason, close with the X button
                 topBar.setVisibility(View.VISIBLE);
                 showHudSticky("Cannot play this file\n" + errorMessage);
@@ -373,6 +406,97 @@ public class PlayerActivity extends AppCompatActivity {
         warnedUnseekable = false;
         createPlayer(software, idx, pos);
         showHud(software ? "Software decoder" : "Hardware decoder");
+    }
+
+
+    // ------------------------------------------------------- subtitles / external
+
+    private void openWithOtherPlayer() {
+        if (player == null) return;
+        MediaItem cur = player.getCurrentMediaItem();
+        if (cur == null || cur.localConfiguration == null) return;
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(cur.localConfiguration.uri, "video/*");
+            player.pause();
+            startActivity(Intent.createChooser(i, "Open with"));
+        } catch (Exception e) {
+            Toast.makeText(this, "No other player found", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openSubtitleSearch() {
+        if (player == null) return;
+        final int idx = player.getCurrentMediaItemIndex();
+        if (idx < 0 || idx >= qTitle.length || qTitle[idx].isEmpty()) {
+            Toast.makeText(this, "No title to search for", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final String[] names = {"English", "Bangla", "Hindi", "Arabic", "Spanish"};
+        final String[] codes = {"eng", "ben", "hin", "ara", "spa"};
+        new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle("Find subtitles: " + qTitle[idx]
+                + (qSeason[idx] > 0 ? " S" + qSeason[idx] + "E" + qEpisode[idx] : ""))
+            .setItems(names, (d, which) -> searchSubs(idx, codes[which]))
+            .show();
+    }
+
+    private void searchSubs(final int idx, final String lang) {
+        Toast.makeText(this, "Searching\u2026", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                final List<SubtitleFinder.Result> res =
+                    SubtitleFinder.search(qTitle[idx], qYear[idx], qSeason[idx], qEpisode[idx], lang);
+                runOnUiThread(() -> {
+                    if (isFinishing()) return;
+                    if (res.isEmpty()) {
+                        Toast.makeText(this, "No subtitles found for this title", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    String[] labels = new String[res.size()];
+                    for (int i = 0; i < res.size(); i++) labels[i] = res.get(i).label;
+                    new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+                        .setTitle(res.size() + " subtitles found")
+                        .setItems(labels, (d, which) -> downloadSub(idx, res.get(which)))
+                        .show();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Subtitle search failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }).start();
+    }
+
+    private void downloadSub(final int idx, final SubtitleFinder.Result r) {
+        Toast.makeText(this, "Downloading subtitle\u2026", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                final File f = SubtitleFinder.download(this, r.link);
+                runOnUiThread(() -> applySubtitle(idx, f, r));
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }).start();
+    }
+
+    private void applySubtitle(int idx, File f, SubtitleFinder.Result r) {
+        if (player == null || isFinishing() || idx >= allItems.size()) return;
+        MediaItem cur = allItems.get(idx);
+        List<MediaItem.SubtitleConfiguration> subs = new ArrayList<>();
+        if (cur.localConfiguration != null) subs.addAll(cur.localConfiguration.subtitleConfigurations);
+        subs.add(new MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(f))
+            .setMimeType(MimeTypes.APPLICATION_SUBRIP)
+            .setLanguage(r.lang)
+            .setLabel("Online \u00b7 " + r.label)
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build());
+        allItems.set(idx, cur.buildUpon().setSubtitleConfigurations(subs).build());
+        long pos = Math.max(0L, player.getCurrentPosition());
+        boolean play = player.getPlayWhenReady();
+        int at = player.getCurrentMediaItemIndex();
+        player.setMediaItems(allItems, at, pos);
+        player.prepare();
+        player.setPlayWhenReady(play);
+        showHud("Subtitle added");
     }
 
     private void updateTitle() {

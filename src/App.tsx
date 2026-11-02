@@ -20,6 +20,9 @@ import { CinemaPlayer } from './components/PlayerEntry';
 import { AppUpdatePrompt } from './components/AppUpdatePrompt';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { dedupeTitle } from './utils/dedupe';
+import { IS_CAPACITOR } from './utils/platform';
+import { MobileShell } from './mobile/ui/MobileShell';
 
 const INITIAL_SOURCES: AppSource[] = [
   {
@@ -164,46 +167,6 @@ import {
   INITIAL_UNIFIED_CATALOG,
 } from './utils/seedData';
 
-
-// ---- Duplicate titles (same movie/series found in several sources or quality folders) ----
-function qualityRank(item: ParsedFtpItem): number {
-  const t = `${item.quality || ''} ${item.rawName || ''} ${item.url || ''}`.toLowerCase();
-  if (/2160p|\b4k\b|uhd/.test(t)) return 4;
-  if (/1080p/.test(t)) return 3;
-  if (/720p/.test(t)) return 2;
-  if (/480p|360p|dvdrip|hdcam|cam\b/.test(t)) return 1;
-  return 0;
-}
-
-function dedupeTitle(items: ParsedFtpItem[]): ParsedFtpItem[] {
-  const index = new Map<string, number>();
-  const out: ParsedFtpItem[] = [];
-  for (const item of items) {
-    // Only whole titles are merged; episodes / files / subtitles / folders are left alone
-    const isSeries = item.mediaKind === 'series';
-    if (item.mediaKind !== 'movie' && !isSeries) {
-      out.push(item);
-      continue;
-    }
-    const norm = (item.cleanTitle || item.rawName || '')
-      .toLowerCase()
-      .replace(/\(.*?\)|\[.*?\]/g, ' ')
-      .replace(/[^a-z0-9\u0980-\u09ff\u0900-\u097f]+/g, '');
-    if (norm.length < 2) {
-      out.push(item);
-      continue;
-    }
-    const key = `${isSeries ? 'tv' : 'mv'}|${norm}|${isSeries ? '' : item.year || ''}`;
-    const at = index.get(key);
-    if (at === undefined) {
-      index.set(key, out.length);
-      out.push(item);
-    } else if (qualityRank(item) > qualityRank(out[at])) {
-      out[at] = item; // keep the best quality at the original position
-    }
-  }
-  return out;
-}
 
 export default function App() {
   const [activeNav, setActiveNav] = useState<ActiveNav>('home');
@@ -503,6 +466,7 @@ export default function App() {
 
   // Fetch items whenever activeNav changes
   useEffect(() => {
+    if (IS_CAPACITOR) return; // phone UI keeps its own cached library
     setSelectedMediaItem(null); // Clear detail view on section switch
     loadIdRef.current++; // cancel any older scan still streaming results
 
@@ -678,6 +642,51 @@ export default function App() {
     }
   };
 
+  const handleDetailPlay = async (
+    video: ParsedFtpItem,
+    playlist: ParsedFtpItem[],
+    subtitles: ParsedFtpItem[],
+    seasons?: SeasonFolderInfo[]
+  ) => {
+              let playVideo = video;
+              let playList = playlist;
+              let playSubs = subtitles;
+              let playSeasons = seasons;
+
+              const isFolder =
+                video.isDirectory ||
+                video.url.endsWith('/') ||
+                !/\.(mp4|mkv|webm|avi|mov|ts|m4v)(\?.*)?$/i.test(video.url);
+
+              if (isFolder) {
+                const cached = getCachedPlayableUrl(video.id) || getCachedPlayableUrl(video.url);
+                if (cached) {
+                  playVideo = { ...video, url: cached, isDirectory: false };
+                  playList = [playVideo];
+                } else {
+                  try {
+                    const resolved = await resolvePlayableFromFolder(video);
+                    if (resolved.primaryVideo) {
+                      playVideo = resolved.primaryVideo;
+                      playList = resolved.allVideos.length > 0 ? resolved.allVideos : [resolved.primaryVideo];
+                      playSubs = resolved.subtitles || subtitles;
+                      playSeasons = resolved.seasons || seasons;
+                      saveCachedPlayableUrl(video.id, resolved.primaryVideo.url);
+                      saveCachedPlayableUrl(video.url, resolved.primaryVideo.url);
+                    }
+                  } catch {}
+                }
+              }
+
+              recordRecentlyPlayed(playVideo, playList);
+              setActivePlayerState({
+                video: playVideo,
+                playlist: playList.length > 0 ? playList : [playVideo],
+                subtitles: playSubs,
+                seasons: playSeasons,
+              });
+            };
+
   // Add source in Settings (with Deep Scan to get accurate movie count!)
   const handleAddSource = async (newSrc: { name: string; url: string; type: 'movies' | 'series' }) => {
     const created: AppSource = {
@@ -784,6 +793,49 @@ export default function App() {
     return sum || 767;
   }, [sources]);
 
+  if (IS_CAPACITOR) {
+    return (
+      <>
+        <MobileShell
+          sources={sources}
+          watchlist={watchlist}
+          recentlyPlayed={recentlyPlayed}
+          watchlistSet={watchlistSet}
+          onToggleWatchlist={toggleWatchlist}
+          selected={selectedMediaItem}
+          setSelected={setSelectedMediaItem}
+          onPlayDirect={handlePlayDirect}
+          onDetailPlay={handleDetailPlay}
+          playerOpen={!!activePlayerState}
+          busy={isLoading && !isDeepScanning}
+          onAddSource={handleAddSource}
+          onRemoveSource={handleRemoveSource}
+          onSyncSource={handleSyncSource}
+          onClearHistory={() => {
+            setRecentlyPlayed([]);
+            try {
+              localStorage.removeItem('cineftp_recent_v6');
+            } catch {}
+          }}
+        />
+        <AppUpdatePrompt />
+        {activePlayerState && (
+          <CinemaPlayer
+            video={activePlayerState.video}
+            playlist={activePlayerState.playlist}
+            subtitles={activePlayerState.subtitles}
+            seasons={activePlayerState.seasons}
+            initialStartTime={activePlayerState.initialStartTime || 0}
+            onClose={() => setActivePlayerState(null)}
+            onSelectVideo={(nextVid) => {
+              setActivePlayerState((prev) => (prev ? { ...prev, video: nextVid, initialStartTime: 0 } : null));
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#090A0F] text-zinc-100 font-sans selection:bg-amber-500 selection:text-black">
       {/* 1. Left Sidebar (Matching Screenshot 1, 2, 3) */}
@@ -829,45 +881,7 @@ export default function App() {
             item={selectedMediaItem.item}
             enrichedMeta={selectedMediaItem.meta}
             onBack={() => setSelectedMediaItem(null)}
-            onPlayItem={async (video, playlist, subtitles, seasons) => {
-              let playVideo = video;
-              let playList = playlist;
-              let playSubs = subtitles;
-              let playSeasons = seasons;
-
-              const isFolder =
-                video.isDirectory ||
-                video.url.endsWith('/') ||
-                !/\.(mp4|mkv|webm|avi|mov|ts|m4v)(\?.*)?$/i.test(video.url);
-
-              if (isFolder) {
-                const cached = getCachedPlayableUrl(video.id) || getCachedPlayableUrl(video.url);
-                if (cached) {
-                  playVideo = { ...video, url: cached, isDirectory: false };
-                  playList = [playVideo];
-                } else {
-                  try {
-                    const resolved = await resolvePlayableFromFolder(video);
-                    if (resolved.primaryVideo) {
-                      playVideo = resolved.primaryVideo;
-                      playList = resolved.allVideos.length > 0 ? resolved.allVideos : [resolved.primaryVideo];
-                      playSubs = resolved.subtitles || subtitles;
-                      playSeasons = resolved.seasons || seasons;
-                      saveCachedPlayableUrl(video.id, resolved.primaryVideo.url);
-                      saveCachedPlayableUrl(video.url, resolved.primaryVideo.url);
-                    }
-                  } catch {}
-                }
-              }
-
-              recordRecentlyPlayed(playVideo, playList);
-              setActivePlayerState({
-                video: playVideo,
-                playlist: playList.length > 0 ? playList : [playVideo],
-                subtitles: playSubs,
-                seasons: playSeasons,
-              });
-            }}
+            onPlayItem={handleDetailPlay}
             isSaved={watchlistSet.has(selectedMediaItem.item.id)}
             onToggleWatchlist={toggleWatchlist}
           />

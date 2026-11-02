@@ -1,3 +1,5 @@
+import { normalizeLookupTitle } from './titleClean';
+
 export type MediaKind =
   | 'movie'
   | 'series'
@@ -46,6 +48,10 @@ export function extractSeasonNumber(rawName: string): number | undefined {
     decoded = decodeURIComponent(rawName);
   } catch {}
   decoded = decoded.replace(/\/+$/, '').trim();
+
+  // Folder named only "1", "02" ... = a season
+  const pureNumber = decoded.match(/^0*(\d{1,2})$/);
+  if (pureNumber && parseInt(pureNumber[1], 10) >= 1) return parseInt(pureNumber[1], 10);
 
   const wordsToNum: Record<string, number> = {
     one: 1,
@@ -781,6 +787,38 @@ export function parseDirectoryHtml(
       items.push(item);
     }
   }
+
+  // Files named only "1.mkv", "02.mp4", "Episode 3.mp4": they are the episodes of the series this folder belongs to
+  try {
+    const segs = baseObj.pathname.split('/').filter(Boolean).map((x) => {
+      try {
+        return decodeURIComponent(x);
+      } catch {
+        return x;
+      }
+    });
+    const folder = segs[segs.length - 1] || '';
+    const folderIsSeason = isSeasonFolderName(folder);
+    const seriesRaw = folderIsSeason ? segs[segs.length - 2] || folder : folder;
+    const seriesName = normalizeLookupTitle(seriesRaw).title || seriesRaw;
+    const folderSeason = folderIsSeason ? extractSeasonNumber(folder) : undefined;
+    const stemOf = (n: string) => n.replace(/\.[a-z0-9]{2,4}$/i, '').trim();
+    const numberOf = (i: ParsedFtpItem) => {
+      const m = stemOf(i.rawName).match(/^(?:e|ep|episode)?[\s._-]*0*(\d{1,3})$/i);
+      return m ? parseInt(m[1], 10) : undefined;
+    };
+    const videos = items.filter((i) => !i.isDirectory && (i.mediaKind === 'movie' || i.mediaKind === 'episode'));
+    const numbered = videos.filter((i) => numberOf(i) !== undefined);
+    if (numbered.length >= 2 && numbered.length >= videos.length * 0.6) {
+      for (const it of numbered) {
+        const n = numberOf(it)!;
+        it.mediaKind = 'episode';
+        it.episode = n;
+        it.season = folderSeason ?? it.season ?? 1;
+        it.cleanTitle = `${seriesName} \u00b7 Episode ${n}`;
+      }
+    }
+  } catch {}
 
   if (localPosterUrl) {
     for (const item of items) {
