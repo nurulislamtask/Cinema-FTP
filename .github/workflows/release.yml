@@ -114,7 +114,24 @@ jobs:
       - run: npx cap sync android
       - name: Build APK
         working-directory: android
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+        shell: bash
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee ../android-build.log
+      - name: Save Android build log on failure (branch ci-logs-android)
+        if: failure()
+        shell: bash
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan ci-logs-android
+          git rm -rf --quiet . || true
+          grep -E "error:|Error|FAILED|What went wrong|warning: \[" -A3 android-build.log | head -150 > android-errors.log || true
+          tail -n 80 android-build.log >> android-errors.log || true
+          git add android-errors.log
+          git commit -q -m "android build log"
+          git push -f origin ci-logs-android
       - name: Attach APK to the release
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk "CineFTP-${{ needs.version.outputs.v }}.apk"
