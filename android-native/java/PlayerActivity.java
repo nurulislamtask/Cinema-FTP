@@ -36,6 +36,9 @@ import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.Format;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.DefaultLoadControl;
@@ -96,6 +99,8 @@ public class PlayerActivity extends AppCompatActivity {
     private TextView aspectBtn;
     private TextView decoderBtn;
     private TextView subsBtn;
+    private TextView audioBtn;
+    private Intent vlcResult = null;
     private String[] qTitle = new String[0];
     private int[] qYear = new int[0];
     private int[] qSeason = new int[0];
@@ -160,6 +165,13 @@ public class PlayerActivity extends AppCompatActivity {
         tlp.rightMargin = dp(10);
         topBar.addView(titleView, tlp);
 
+        audioBtn = barButton("Audio");
+        audioBtn.setOnClickListener(v -> openAudioPicker());
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        alp.rightMargin = dp(8);
+        topBar.addView(audioBtn, alp);
+
         subsBtn = barButton("Subs");
         subsBtn.setOnClickListener(v -> openSubtitleSearch());
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
@@ -173,6 +185,13 @@ public class PlayerActivity extends AppCompatActivity {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         olp.rightMargin = dp(8);
         topBar.addView(openWith, olp);
+
+        TextView vlcBtn = barButton("VLC");
+        vlcBtn.setOnClickListener(v -> launchVlc("manual"));
+        LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        vlp.rightMargin = dp(8);
+        topBar.addView(vlcBtn, vlp);
 
         decoderBtn = barButton("HW");
         decoderBtn.setOnClickListener(v -> switchDecoder(!softwareDecoders));
@@ -346,13 +365,22 @@ public class PlayerActivity extends AppCompatActivity {
                     || code == PlaybackException.ERROR_CODE_UNSPECIFIED
                     || code == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
                     || code == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED;
-                if (recoverable && ladder < 3) {
+                if (recoverable && ladder < 1) {
                     // try the next decoder combination: HW+ffmpeg -> SW+ffmpeg -> HW only -> SW only
                     ladder++;
                     boolean sw = ladder == 1 || ladder == 3;
                     ffmpegAudio = ladder < 2;
                     showHud("Trying another decoder (" + ladder + "/3)\u2026");
                     ui.post(() -> switchDecoder(sw));
+                    return;
+                }
+                boolean network = code == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+                    || code == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                    || code == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                    || code == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND;
+                if (!network && !triedVlc) {
+                    showHud("Switching to VLC engine\u2026");
+                    ui.post(() -> launchVlc("auto"));
                     return;
                 }
                 Throwable c = error.getCause();
@@ -377,6 +405,18 @@ public class PlayerActivity extends AppCompatActivity {
             @Override
             public void onMediaItemTransition(MediaItem item, int reason) {
                 updateTitle();
+            }
+
+            @Override
+            public void onTracksChanged(Tracks tracks) {
+                int n = 0;
+                for (Tracks.Group g : tracks.getGroups()) if (g.getType() == C.TRACK_TYPE_AUDIO) n++;
+                audioCount = n;
+                if (audioBtn != null) audioBtn.setText(n > 1 ? "Audio (" + n + ")" : "Audio");
+                if (n > 1 && !audioHint) {
+                    audioHint = true;
+                    showHud(n + " audio tracks \u2013 tap Audio to choose");
+                }
             }
 
             @Override
@@ -408,6 +448,80 @@ public class PlayerActivity extends AppCompatActivity {
         showHud(software ? "Software decoder" : "Hardware decoder");
     }
 
+
+
+    private boolean triedVlc = false;
+    private boolean audioHint = false;
+    private int audioCount = 0;
+
+    /** Hands playback to the libVLC based player (plays almost any file) and returns its result. */
+    private void launchVlc(String why) {
+        triedVlc = true;
+        int idx = 0;
+        long pos = 0L;
+        if (player != null) {
+            idx = Math.max(0, player.getCurrentMediaItemIndex());
+            pos = Math.max(0L, player.getCurrentPosition());
+            player.release();
+            player = null;
+        }
+        try {
+            Intent i = new Intent(this, VlcPlayerActivity.class);
+            i.putExtra("items", getIntent().getStringExtra("items"));
+            i.putExtra("index", idx);
+            i.putExtra("position", pos);
+            startActivityForResult(i, 77);
+        } catch (Throwable t) {
+            errorMessage = "VLC engine unavailable: " + t.getMessage();
+            finish();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 77) {
+            vlcResult = data != null ? data : new Intent();
+            finish();
+        }
+    }
+
+    private void openAudioPicker() {
+        if (player == null) return;
+        final List<Tracks.Group> groups = new ArrayList<>();
+        final List<String> names = new ArrayList<>();
+        for (Tracks.Group g : player.getCurrentTracks().getGroups()) {
+            if (g.getType() != C.TRACK_TYPE_AUDIO) continue;
+            Format f = g.getTrackFormat(0);
+            StringBuilder sb = new StringBuilder();
+            if (f.label != null && !f.label.isEmpty()) sb.append(f.label);
+            else if (f.language != null && !"und".equals(f.language)) {
+                sb.append(new Locale(f.language).getDisplayLanguage());
+            } else sb.append("Track ").append(groups.size() + 1);
+            if (f.channelCount > 0) sb.append(" \u00B7 ").append(f.channelCount > 2 ? f.channelCount - 1 + ".1" : f.channelCount + ".0");
+            if (f.sampleMimeType != null) {
+                String m = f.sampleMimeType.replace("audio/", "").toUpperCase(Locale.ROOT);
+                sb.append(" \u00B7 ").append(m);
+            }
+            if (g.isSelected()) sb.append("  \u2713");
+            groups.add(g);
+            names.add(sb.toString());
+        }
+        if (groups.size() < 2) {
+            Toast.makeText(this, groups.isEmpty() ? "No audio track found" : "Only one audio track in this file",
+                Toast.LENGTH_SHORT).show();
+            return;
+        }
+        new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle("Audio track")
+            .setItems(names.toArray(new String[0]), (d, which) -> {
+                player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                    .setOverrideForType(new TrackSelectionOverride(groups.get(which).getMediaTrackGroup(), 0))
+                    .build());
+                showHud(names.get(which).replace("  \u2713", ""));
+            })
+            .show();
+    }
 
     // ------------------------------------------------------- subtitles / external
 
@@ -680,8 +794,8 @@ public class PlayerActivity extends AppCompatActivity {
     public void finish() {
         if (!finishedOnce) {
             finishedOnce = true;
-            Intent r = new Intent();
-            if (player != null) {
+            Intent r = vlcResult != null ? vlcResult : new Intent();
+            if (vlcResult == null && player != null) {
                 r.putExtra("index", player.getCurrentMediaItemIndex());
                 r.putExtra("position", Math.max(0L, player.getCurrentPosition()));
                 r.putExtra("duration", Math.max(0L, player.getDuration()));

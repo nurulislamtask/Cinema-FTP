@@ -10,6 +10,11 @@ import android.os.Environment;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import java.io.File;
+import java.io.ByteArrayOutputStream;
+import java.util.HashMap;
+import android.graphics.Bitmap;
+import android.media.MediaMetadataRetriever;
+import android.util.Base64;
 import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -39,6 +44,42 @@ public class NativePlayerPlugin extends Plugin {
         intent.putExtra("index", index == null ? 0 : index);
         intent.putExtra("position", (long) ((position == null ? 0.0 : position) * 1000.0));
         startActivityForResult(call, intent, "onPlayerResult");
+    }
+
+    /** Grabs one frame from a video address (used for per-episode thumbnails). Returns { data: "data:image/jpeg;base64,..." }. */
+    @PluginMethod
+    public void frame(final PluginCall call) {
+        final String url = call.getString("url");
+        if (url == null || url.isEmpty()) {
+            call.reject("No url");
+            return;
+        }
+        new Thread(() -> {
+            MediaMetadataRetriever r = new MediaMetadataRetriever();
+            try {
+                HashMap<String, String> h = new HashMap<>();
+                h.put("User-Agent", "Mozilla/5.0 (Linux; Android) CineFTP");
+                r.setDataSource(url, h);
+                long durMs = 0;
+                try { durMs = Long.parseLong(r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)); } catch (Exception ignored) { }
+                long at = durMs > 0 ? Math.min(durMs / 5, 600000L) : 60000L; // 20% in, at most 10 min
+                Bitmap bmp = r.getFrameAtTime(at * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                if (bmp == null) bmp = r.getFrameAtTime(-1);
+                if (bmp == null) { call.reject("no frame"); return; }
+                int w = 480;
+                int hgt = Math.max(1, bmp.getHeight() * w / Math.max(1, bmp.getWidth()));
+                Bitmap small = Bitmap.createScaledBitmap(bmp, w, hgt, true);
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                small.compress(Bitmap.CompressFormat.JPEG, 70, bos);
+                JSObject out = new JSObject();
+                out.put("data", "data:image/jpeg;base64," + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP));
+                call.resolve(out);
+            } catch (Throwable t) {
+                call.reject("frame failed: " + t.getMessage());
+            } finally {
+                try { r.release(); } catch (Throwable ignored) { }
+            }
+        }).start();
     }
 
     @ActivityCallback

@@ -24,5 +24,6 @@ export interface NativePlayerResult {
 /** Android only: full-screen ExoPlayer with MX-Player-style gestures (see android-native/java). */
 export const NativePlayer = registerPlugin<{
   play(options: { items: NativePlayerItem[]; index: number; position: number; software?: boolean }): Promise<NativePlayerResult>;
+  frame(options: { url: string }): Promise<{ data: string }>;
   installUpdate(options: { url: string }): Promise<void>;
 }>('NativePlayer');

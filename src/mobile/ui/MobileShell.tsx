@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ParsedFtpItem } from '../../utils/ftpParser';
 import { AppSource, RecentlyPlayedEntry } from '../../types/cineftp';
@@ -45,20 +45,49 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
     if (!props.playerOpen) setResumeTick((n) => n + 1);
   }, [props.playerOpen]);
 
-  // Android back button: close search / details first instead of leaving the app
+  // Android back button: every open layer (tab, search, details) owns one history entry,
+  // so "back" closes the top layer instead of leaving the app.
+  const stack = useRef<string[]>([]);
+  const ignorePop = useRef(0);
+  const live = useRef({ tab, searchOpen, selected: props.selected, setSelected: props.setSelected });
+  live.current = { tab, searchOpen, selected: props.selected, setSelected: props.setSelected };
+
   useEffect(() => {
-    const wasOpen = searchOpen || !!props.selected;
-    if (wasOpen) history.pushState({ cine: 1 }, '');
-  }, [searchOpen, props.selected?.item.id]);
+    const desired: string[] = [];
+    // keep the order in which layers were opened
+    const open = new Set<string>();
+    if (tab !== 'home') open.add('tab');
+    if (searchOpen) open.add('search');
+    if (props.selected) open.add('detail');
+    const kept = stack.current.filter((k) => open.has(k));
+    const removed = stack.current.length - kept.length;
+    desired.push(...kept);
+    for (const k of ['tab', 'search', 'detail']) if (open.has(k) && !kept.includes(k)) desired.push(k);
+    if (removed > 0) {
+      ignorePop.current = 1;
+      history.go(-removed);
+    }
+    for (const k of desired.slice(kept.length)) {
+      try { history.pushState({ cine: k }, ''); } catch { /* ignore */ }
+    }
+    stack.current = desired;
+  }, [tab, searchOpen, props.selected?.item.id]);
+
   useEffect(() => {
     const onPop = () => {
-      if (searchOpen) setSearchOpen(false);
-      else if (props.selected) props.setSelected(null);
-      else if (tab !== 'home') setTab('home');
+      if (ignorePop.current > 0) {
+        ignorePop.current = 0;
+        return;
+      }
+      const kind = stack.current.pop();
+      const L = live.current;
+      if (kind === 'search') setSearchOpen(false);
+      else if (kind === 'detail') L.setSelected(null);
+      else if (kind === 'tab') setTab('home');
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [searchOpen, props.selected, tab]);
+  }, []);
 
   const api: ShellApi = useMemo(
     () => ({

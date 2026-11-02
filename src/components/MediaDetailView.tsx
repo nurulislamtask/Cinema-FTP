@@ -23,6 +23,8 @@ import {
   Radio,
 } from 'lucide-react';
 import { ParsedFtpItem } from '../utils/ftpParser';
+import { IS_CAPACITOR } from '../utils/platform';
+import { useGuide, episodeName, EpisodeThumb } from '../mobile/episodeGuide';
 import {
   SeasonFolderInfo,
   crawlSeriesSeasons,
@@ -64,6 +66,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
   const [seasons, setSeasons] = useState<SeasonFolderInfo[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [episodes, setEpisodes] = useState<ParsedFtpItem[]>([]);
+  const guide = useGuide(IS_CAPACITOR ? (item.cleanTitle || item.rawName).split(' · ')[0] : '');
   const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
 
   // Movie folder resolution state
@@ -640,11 +643,20 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                       >
                         {/* Left: Thumbnail with Play Hover */}
                         <div className="relative w-full sm:w-48 aspect-video rounded-lg overflow-hidden bg-[#1A202E] shrink-0">
-                          <img
-                            src={backdropUrl || posterUrl}
-                            alt=""
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 opacity-80"
-                          />
+                          {IS_CAPACITOR ? (
+                            <EpisodeThumb
+                              videoUrl={ep.url}
+                              still={guide?.[`S${sNum}E${epNum}`]?.image}
+                              fallback={backdropUrl || posterUrl}
+                              className="w-full h-full object-cover opacity-90"
+                            />
+                          ) : (
+                            <img
+                              src={backdropUrl || posterUrl}
+                              alt=""
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 opacity-80"
+                            />
+                          )}
                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                             <div className="w-8 h-8 rounded-full bg-[#E5A00D] text-black flex items-center justify-center shadow-lg">
                               <Play className="w-3.5 h-3.5 fill-black translate-x-0.5" />
@@ -666,7 +678,9 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                           </div>
 
                           <h4 className="font-semibold text-sm text-zinc-100 group-hover:text-amber-400 transition-colors truncate">
-                            {ep.cleanTitle || ep.rawName}
+                            {IS_CAPACITOR
+                              ? episodeName(guide, sNum, epNum) || `Episode ${epNum}`
+                              : ep.cleanTitle || ep.rawName}
                           </h4>
 
                           <div className="text-[11px] font-mono text-zinc-500 flex items-center gap-2">

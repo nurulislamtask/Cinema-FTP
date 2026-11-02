@@ -4,6 +4,7 @@ import { ParsedFtpItem } from '../utils/ftpParser';
 import type { CinemaPlayerProps } from './CinemaPlayer';
 import { NativePlayer, NativePlayerItem } from '../mobile/nativePlayer';
 import { displayTitle } from '../utils/titleClean';
+import { playerEpisodeTitle } from '../mobile/episodeGuide';
 import { readPrefs } from '../mobile/prefs';
 import { resolvePlayableFromFolder, getCachedPlayableUrl, saveCachedPlayableUrl } from '../services/ftpClient';
 
@@ -37,6 +38,12 @@ function savePosition(id: string, t: number, d: number) {
   } catch {}
 }
 
+function titleOf(p: ParsedFtpItem): string {
+  const base = p.cleanTitle || p.rawName;
+  if (p.episode === undefined) return base;
+  return playerEpisodeTitle(base.split(' · ')[0], p.season, p.episode, base);
+}
+
 function metaOf(p: ParsedFtpItem) {
   return {
     query: displayTitle(p.cleanTitle || p.rawName),
@@ -53,6 +60,8 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState('Opening player…');
   const launchedFor = useRef<string | null>(null);
+  const setFallback = (_startAt: number) =>
+    setFailure('This file could not be played. Try again, or use "Open with" inside the player to pick another app.');
 
   useEffect(() => {
     const key = video.id + '#' + attempt;
@@ -90,18 +99,18 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
           if (p.id === video.id) {
             queue.push({
               id: p.id,
-              item: { url: safeUrl(url), title: p.cleanTitle || p.rawName, ...metaOf(p), subtitles: toSub(subtitles || []) },
+              item: { url: safeUrl(url), title: titleOf(p), ...metaOf(p), subtitles: toSub(subtitles || []) },
             });
           } else if (!p.isDirectory && DIRECT_VIDEO.test(p.url)) {
             const re = epRegex(p.episode);
             const subs = re ? (subtitles || []).filter((s) => re.test(s.rawName)) : [];
-            queue.push({ id: p.id, item: { url: safeUrl(p.url), title: p.cleanTitle || p.rawName, ...metaOf(p), subtitles: toSub(subs) } });
+            queue.push({ id: p.id, item: { url: safeUrl(p.url), title: titleOf(p), ...metaOf(p), subtitles: toSub(subs) } });
           }
         }
         if (!queue.some((q) => q.id === video.id)) {
           queue.splice(0, queue.length, {
             id: video.id,
-            item: { url: safeUrl(url), title: video.cleanTitle || video.rawName, ...metaOf(video), subtitles: toSub(subtitles || []) },
+            item: { url: safeUrl(url), title: titleOf(video), ...metaOf(video), subtitles: toSub(subtitles || []) },
           });
         }
         const index = Math.max(0, queue.findIndex((q) => q.id === video.id));
