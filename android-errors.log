@@ -1,0 +1,124 @@
+> Task :app:compileDebugJavaWithJavac FAILED
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:469: error: package SubtitleFinder does not exist
+    private void downloadSub(final int idx, final SubtitleFinder.Result r) {
+                                                                ^
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:481: error: package SubtitleFinder does not exist
+    private void applySubtitle(int idx, File f, SubtitleFinder.Result r) {
+                                                              ^
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:448: error: package SubtitleFinder does not exist
+                final List<SubtitleFinder.Result> res =
+                                         ^
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:449: error: cannot find symbol
+                    SubtitleFinder.search(qTitle[idx], qYear[idx], qSeason[idx], qEpisode[idx], lang);
+                    ^
+  symbol:   variable SubtitleFinder
+--
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:473: error: cannot find symbol
+                final File f = SubtitleFinder.download(this, r.link);
+                               ^
+  symbol:   variable SubtitleFinder
+--
+* What went wrong:
+Execution failed for task ':app:compileDebugJavaWithJavac'.
+> Compilation failed; see the compiler output below.
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:469: error: package SubtitleFinder does not exist
+      private void downloadSub(final int idx, final SubtitleFinder.Result r) {
+                                                                  ^
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:481: error: package SubtitleFinder does not exist
+      private void applySubtitle(int idx, File f, SubtitleFinder.Result r) {
+                                                                ^
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:448: error: package SubtitleFinder does not exist
+                  final List<SubtitleFinder.Result> res =
+                                           ^
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:449: error: cannot find symbol
+                      SubtitleFinder.search(qTitle[idx], qYear[idx], qSeason[idx], qEpisode[idx], lang);
+                      ^
+    symbol:   variable SubtitleFinder
+--
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:473: error: cannot find symbol
+                  final File f = SubtitleFinder.download(this, r.link);
+                                 ^
+    symbol:   variable SubtitleFinder
+--
+BUILD FAILED in 46s
+40 actionable tasks: 40 executed
+> Task :capacitor-android:compileDebugLibraryResources
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :capacitor-cordova-android-plugins:compileDebugLibraryResources
+> Task :app:processDebugManifestForPackage
+> Task :capacitor-android:parseDebugLocalResources
+> Task :capacitor-cordova-android-plugins:javaPreCompileDebug
+> Task :capacitor-android:javaPreCompileDebug
+> Task :capacitor-cordova-android-plugins:parseDebugLocalResources
+> Task :app:mergeDebugShaders
+> Task :capacitor-cordova-android-plugins:generateDebugRFile
+> Task :capacitor-android:generateDebugRFile
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:processDebugResources
+
+> Task :capacitor-android:compileDebugJavaWithJavac
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :capacitor-cordova-android-plugins:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:bundleLibCompileToJarDebug
+> Task :capacitor-android:mergeDebugShaders
+> Task :capacitor-android:bundleLibCompileToJarDebug
+
+> Task :app:compileDebugJavaWithJavac FAILED
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:469: error: package SubtitleFinder does not exist
+    private void downloadSub(final int idx, final SubtitleFinder.Result r) {
+                                                                ^
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:481: error: package SubtitleFinder does not exist
+    private void applySubtitle(int idx, File f, SubtitleFinder.Result r) {
+                                                              ^
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:448: error: package SubtitleFinder does not exist
+                final List<SubtitleFinder.Result> res =
+                                         ^
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:449: error: cannot find symbol
+                    SubtitleFinder.search(qTitle[idx], qYear[idx], qSeason[idx], qEpisode[idx], lang);
+                    ^
+  symbol:   variable SubtitleFinder
+  location: class PlayerActivity
+/home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:473: error: cannot find symbol
+                final File f = SubtitleFinder.download(this, r.link);
+                               ^
+  symbol:   variable SubtitleFinder
+  location: class PlayerActivity
+5 errors
+[Incubating] Problems report is available at: file:///home/runner/work/Cinema-FTP/Cinema-FTP/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugJavaWithJavac'.
+> Compilation failed; see the compiler output below.
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:469: error: package SubtitleFinder does not exist
+      private void downloadSub(final int idx, final SubtitleFinder.Result r) {
+                                                                  ^
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:481: error: package SubtitleFinder does not exist
+      private void applySubtitle(int idx, File f, SubtitleFinder.Result r) {
+                                                                ^
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:448: error: package SubtitleFinder does not exist
+                  final List<SubtitleFinder.Result> res =
+                                           ^
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:449: error: cannot find symbol
+                      SubtitleFinder.search(qTitle[idx], qYear[idx], qSeason[idx], qEpisode[idx], lang);
+                      ^
+    symbol:   variable SubtitleFinder
+    location: class PlayerActivity
+  /home/runner/work/Cinema-FTP/Cinema-FTP/android/app/src/main/java/com/cineftp/mobile/PlayerActivity.java:473: error: cannot find symbol
+                  final File f = SubtitleFinder.download(this, r.link);
+                                 ^
+    symbol:   variable SubtitleFinder
+    location: class PlayerActivity
+  5 errors
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to get full insights.
+
+BUILD FAILED in 46s
+40 actionable tasks: 40 executed
