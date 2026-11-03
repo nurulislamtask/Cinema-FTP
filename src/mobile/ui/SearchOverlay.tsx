@@ -47,7 +47,7 @@ export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = (
       {q.trim().length >= 2 && (
         <p className="px-4 pb-2 text-[12px] text-zinc-500">{results.length} result{results.length === 1 ? '' : 's'}</p>
       )}
-      <div className="grid grid-cols-3 gap-x-2.5 gap-y-4 px-3.5 pb-10">
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-9 gap-x-2.5 md:gap-x-3 gap-y-4 px-3.5 md:px-6 pb-10">
         {results.map((it) => (
           <MobilePoster
             key={it.id}

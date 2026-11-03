@@ -9,7 +9,7 @@ export const Row: React.FC<{
   children: React.ReactNode;
 }> = ({ title, subtitle, onMore, children }) => (
   <section className="mt-6">
-    <div className="mb-2.5 flex items-end justify-between px-4">
+    <div className="mb-2.5 flex items-end justify-between px-4 md:px-6">
       <div className="min-w-0">
         <h2 className="truncate text-[17px] font-bold tracking-tight text-white">{title}</h2>
         {subtitle && <p className="text-[11px] text-zinc-500">{subtitle}</p>}
@@ -21,7 +21,7 @@ export const Row: React.FC<{
       )}
     </div>
     <div
-      className="flex snap-x gap-3 overflow-x-auto px-4 pb-1"
+      className="flex snap-x gap-3 overflow-x-auto px-4 md:px-6 pb-1"
       style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
     >
       {children}

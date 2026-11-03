@@ -823,6 +823,7 @@ export default function App() {
         />
         <AppUpdatePrompt />
         {activePlayerState && (
+          <div className="fixed inset-0 z-[500] bg-black">
           <CinemaPlayer
             video={activePlayerState.video}
             playlist={activePlayerState.playlist}
@@ -834,6 +835,7 @@ export default function App() {
               setActivePlayerState((prev) => (prev ? { ...prev, video: nextVid, initialStartTime: 0 } : null));
             }}
           />
+          </div>
         )}
       </>
     );

@@ -20,7 +20,7 @@ export const ListTab: React.FC<{ api: ShellApi }> = ({ api }) => {
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-x-2.5 gap-y-4 px-3.5 pt-4">
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-9 gap-x-2.5 md:gap-x-3 gap-y-4 px-3.5 md:px-6 pt-4">
         {items.map((it) => (
           <MobilePoster
             key={it.id}

@@ -47,7 +47,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
   return (
     <div className="pb-4">
       <div className="sticky top-0 z-20 bg-[#07080C]/95 pb-2 pt-3 backdrop-blur">
-        <div className="flex items-center justify-between px-4">
+        <div className="flex items-center justify-between px-4 md:px-6">
           <div>
             <h1 className="text-[22px] font-extrabold tracking-tight text-white">{kind === 'movie' ? 'Movies' : 'Series'}</h1>
             <p className="text-[11px] text-zinc-500">{list.length.toLocaleString()} titles</p>
@@ -56,7 +56,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
             <Search className="h-5 w-5 text-white" />
           </button>
         </div>
-        <div className="mt-3 flex gap-2 overflow-x-auto px-4" style={{ scrollbarWidth: 'none' }}>
+        <div className="mt-3 flex gap-2 overflow-x-auto px-4 md:px-6" style={{ scrollbarWidth: 'none' }}>
           <button className={chip(sort === 'latest')} onClick={() => setSort('latest')}>Latest</button>
           <button className={chip(sort === 'az')} onClick={() => setSort('az')}>A–Z</button>
           <span className="mx-1 w-px shrink-0 bg-white/10" />
@@ -69,7 +69,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-x-2.5 gap-y-4 px-3.5 pt-2">
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-9 gap-x-2.5 md:gap-x-3 gap-y-4 px-3.5 md:px-6 pt-2">
         {list.slice(0, shown).map((it: ParsedFtpItem) => (
           <MobilePoster
             key={it.id}

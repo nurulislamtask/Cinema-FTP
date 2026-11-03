@@ -41,7 +41,7 @@ const Slide: React.FC<SlideProps> = ({ item, active, saved, onPlay, onDetails, o
         <div className="h-full w-full bg-gradient-to-br from-[#2A1F08] via-[#14161F] to-[#07080C]" />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-[#07080C] via-[#07080C]/55 to-black/30" />
-      <div className="absolute inset-x-0 bottom-0 px-4 pb-9">
+      <div className="absolute inset-x-0 bottom-0 px-4 pb-9 md:px-10 md:pb-12">
         <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-zinc-300">
           <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-amber-300 ring-1 ring-amber-400/30">
             {item.mediaKind === 'series' ? 'SERIES' : 'MOVIE'}
@@ -55,10 +55,10 @@ const Slide: React.FC<SlideProps> = ({ item, active, saved, onPlay, onDetails, o
           {year && <span>{year}</span>}
           {item.quality && <span className="rounded border border-white/25 px-1.5 text-[10px]">{item.quality}</span>}
         </div>
-        <h1 className="line-clamp-2 text-[28px] font-extrabold leading-[1.05] tracking-tight text-white drop-shadow-lg">{title}</h1>
+        <h1 className="line-clamp-2 text-[28px] md:text-[44px] font-extrabold leading-[1.05] tracking-tight text-white drop-shadow-lg">{title}</h1>
         {genres.length > 0 && <p className="mt-1 text-[12px] text-zinc-300">{genres.join(' · ')}</p>}
-        {plot && <p className="mt-2 line-clamp-2 text-[12.5px] leading-snug text-zinc-300/90">{plot}</p>}
-        <div className="mt-4 flex items-center gap-2.5">
+        {plot && <p className="mt-2 line-clamp-2 md:max-w-2xl text-[12.5px] md:text-sm leading-snug text-zinc-300/90">{plot}</p>}
+        <div className="mt-4 flex items-center gap-2.5 md:max-w-md">
           <button
             onClick={() => onPlay(item, meta)}
             className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 text-[15px] font-bold text-black shadow-lg shadow-amber-500/20 active:scale-[0.97]"
@@ -109,12 +109,12 @@ export const Hero: React.FC<{
   useEffect(() => setIndex(0), [items[0]?.id]);
 
   if (n === 0) {
-    return <div className="h-[62vh] animate-pulse bg-gradient-to-b from-[#161A25] to-[#07080C]" />;
+    return <div className="h-[62vh] md:h-[58vh] md:max-h-[540px] animate-pulse bg-gradient-to-b from-[#161A25] to-[#07080C]" />;
   }
 
   return (
     <div
-      className="relative h-[66vh] min-h-[420px] w-full overflow-hidden"
+      className="relative h-[66vh] min-h-[420px] w-full overflow-hidden md:h-[58vh] md:max-h-[540px] md:min-h-[380px]"
       onTouchStart={(e) => {
         paused.current = true;
         touchX.current = e.touches[0].clientX;
