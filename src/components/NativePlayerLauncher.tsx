@@ -4,6 +4,7 @@ import { ParsedFtpItem } from '../utils/ftpParser';
 import type { CinemaPlayerProps } from './CinemaPlayer';
 import { NativePlayer, NativePlayerItem } from '../mobile/nativePlayer';
 import { displayTitle } from '../utils/titleClean';
+import { registerBack } from '../mobile/backStack';
 import { playerEpisodeTitle } from '../mobile/episodeGuide';
 import { readPrefs } from '../mobile/prefs';
 import { resolvePlayableFromFolder, getCachedPlayableUrl, saveCachedPlayableUrl } from '../services/ftpClient';
@@ -60,6 +61,7 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState('Opening player…');
   const launchedFor = useRef<string | null>(null);
+  useEffect(() => registerBack(() => { onClose(); return true; }), []);
   const setFallback = (_startAt: number) =>
     setFailure('This file could not be played. Try again, or use "Open with" inside the player to pick another app.');
 

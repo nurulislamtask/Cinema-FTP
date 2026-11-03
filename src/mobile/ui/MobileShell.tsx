@@ -4,6 +4,7 @@ import { ParsedFtpItem } from '../../utils/ftpParser';
 import { AppSource, RecentlyPlayedEntry } from '../../types/cineftp';
 import { EnrichedMetadata } from '../../services/ftpClient';
 import { MediaDetailView } from '../../components/MediaDetailView';
+import { registerBack } from '../backStack';
 import { useLibrary } from '../useLibrary';
 import { usePrefs } from '../prefs';
 import { BottomNav } from './BottomNav';
@@ -45,49 +46,20 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
     if (!props.playerOpen) setResumeTick((n) => n + 1);
   }, [props.playerOpen]);
 
-  // Android back button: every open layer (tab, search, details) owns one history entry,
-  // so "back" closes the top layer instead of leaving the app.
-  const stack = useRef<string[]>([]);
-  const ignorePop = useRef(0);
+  // Back button / Esc: close the top layer first (search, details, other tab), leave the app only from Home
   const live = useRef({ tab, searchOpen, selected: props.selected, setSelected: props.setSelected });
   live.current = { tab, searchOpen, selected: props.selected, setSelected: props.setSelected };
-
-  useEffect(() => {
-    const desired: string[] = [];
-    // keep the order in which layers were opened
-    const open = new Set<string>();
-    if (tab !== 'home') open.add('tab');
-    if (searchOpen) open.add('search');
-    if (props.selected) open.add('detail');
-    const kept = stack.current.filter((k) => open.has(k));
-    const removed = stack.current.length - kept.length;
-    desired.push(...kept);
-    for (const k of ['tab', 'search', 'detail']) if (open.has(k) && !kept.includes(k)) desired.push(k);
-    if (removed > 0) {
-      ignorePop.current = 1;
-      history.go(-removed);
-    }
-    for (const k of desired.slice(kept.length)) {
-      try { history.pushState({ cine: k }, ''); } catch { /* ignore */ }
-    }
-    stack.current = desired;
-  }, [tab, searchOpen, props.selected?.item.id]);
-
-  useEffect(() => {
-    const onPop = () => {
-      if (ignorePop.current > 0) {
-        ignorePop.current = 0;
-        return;
-      }
-      const kind = stack.current.pop();
-      const L = live.current;
-      if (kind === 'search') setSearchOpen(false);
-      else if (kind === 'detail') L.setSelected(null);
-      else if (kind === 'tab') setTab('home');
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  useEffect(
+    () =>
+      registerBack(() => {
+        const L = live.current;
+        if (L.searchOpen) { setSearchOpen(false); return true; }
+        if (L.selected) { L.setSelected(null); return true; }
+        if (L.tab !== 'home') { setTab('home'); return true; }
+        return false;
+      }),
+    []
+  );
 
   const api: ShellApi = useMemo(
     () => ({

@@ -116,6 +116,7 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
       .map(([name, v]) => ({ name, items: [...v].sort(newest).slice(0, 20) }));
   }, [homeItems]);
 
+  const [removedTick, bump] = React.useReducer((x: number) => x + 1, 0);
   const continueList = useMemo(() => {
     if (!prefs.showContinue) return [];
     const resume = readResume();
@@ -123,7 +124,7 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
       .filter((r) => resume[r.id] && resume[r.id].t > 10)
       .slice(0, 12)
       .map((r) => ({ item: r.video, ...resume[r.id] }));
-  }, [api.recent, prefs.showContinue, api.resumeTick]);
+  }, [api.recent, prefs.showContinue, api.resumeTick, removedTick]);
 
   const [, force] = React.useReducer((x: number) => x + 1, 0);
   const card = (it: ParsedFtpItem, cls = 'w-[31vw] max-w-[150px] shrink-0 snap-start') => (
@@ -175,6 +176,7 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
               onPlay={() => api.play(c.item, null)}
               onRemove={() => {
                 clearResume(c.item.id);
+                bump();
                 force();
                 window.dispatchEvent(new Event('cineftp:prefs'));
               }}

@@ -22,6 +22,9 @@ import { AiAssistantModal } from './components/AiAssistantModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { dedupeTitle } from './utils/dedupe';
 import { IS_CAPACITOR } from './utils/platform';
+
+/** Same modern interface on phone and PC. */
+const NEW_UI = true;
 import { MobileShell } from './mobile/ui/MobileShell';
 
 const INITIAL_SOURCES: AppSource[] = [
@@ -466,7 +469,7 @@ export default function App() {
 
   // Fetch items whenever activeNav changes
   useEffect(() => {
-    if (IS_CAPACITOR) return; // phone UI keeps its own cached library
+    if (NEW_UI) return; // the new UI keeps its own cached library
     setSelectedMediaItem(null); // Clear detail view on section switch
     loadIdRef.current++; // cancel any older scan still streaming results
 
@@ -793,7 +796,7 @@ export default function App() {
     return sum || 767;
   }, [sources]);
 
-  if (IS_CAPACITOR) {
+  if (NEW_UI) {
     return (
       <>
         <MobileShell

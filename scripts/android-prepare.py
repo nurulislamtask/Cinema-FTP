@@ -118,7 +118,9 @@ android {
     defaultConfig {
         versionCode %s
         versionName '%s'
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
     }
+    packagingOptions { jniLibs { useLegacyPackaging = true } }
     buildTypes {
         debug { signingConfig signingConfigs.cineftp }
         release { signingConfig signingConfigs.cineftp }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NativePlayer } from './nativePlayer';
+import { IS_CAPACITOR } from '../utils/platform';
 import { normalizeLookupTitle } from '../utils/titleClean';
 
 /** Real episode names + stills (TVMaze) and, when missing, a frame grabbed from the video itself. */
@@ -184,7 +185,7 @@ export const EpisodeThumb: React.FC<{ videoUrl: string; still?: string; fallback
     let alive = true;
     setSrc(still || undefined);
     // a real frame of THIS file is preferred when no episode still exists
-    if (!still) {
+    if (!still && IS_CAPACITOR) {
       let target: string;
       try {
         target = new URL(videoUrl).href;

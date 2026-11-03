@@ -23,7 +23,6 @@ import {
   Radio,
 } from 'lucide-react';
 import { ParsedFtpItem } from '../utils/ftpParser';
-import { IS_CAPACITOR } from '../utils/platform';
 import { useGuide, episodeName, EpisodeThumb } from '../mobile/episodeGuide';
 import {
   SeasonFolderInfo,
@@ -66,7 +65,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
   const [seasons, setSeasons] = useState<SeasonFolderInfo[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [episodes, setEpisodes] = useState<ParsedFtpItem[]>([]);
-  const guide = useGuide(IS_CAPACITOR ? (item.cleanTitle || item.rawName).split(' · ')[0] : '');
+  const guide = useGuide((item.cleanTitle || item.rawName).split(' · ')[0]);
   const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
 
   // Movie folder resolution state
@@ -643,7 +642,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                       >
                         {/* Left: Thumbnail with Play Hover */}
                         <div className="relative w-full sm:w-48 aspect-video rounded-lg overflow-hidden bg-[#1A202E] shrink-0">
-                          {IS_CAPACITOR ? (
+                          {true ? (
                             <EpisodeThumb
                               videoUrl={ep.url}
                               still={guide?.[`S${sNum}E${epNum}`]?.image}
@@ -678,7 +677,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                           </div>
 
                           <h4 className="font-semibold text-sm text-zinc-100 group-hover:text-amber-400 transition-colors truncate">
-                            {IS_CAPACITOR
+                            {true
                               ? episodeName(guide, sNum, epNum) || `Episode ${epNum}`
                               : ep.cleanTitle || ep.rawName}
                           </h4>
