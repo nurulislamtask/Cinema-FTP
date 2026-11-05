@@ -38,8 +38,11 @@ public class NativePlayerPlugin extends Plugin {
         Integer index = call.getInt("index", 0);
         Double position = call.getDouble("position", 0.0);
         Boolean software = call.getBoolean("software", false);
-        Intent intent = new Intent(getContext(), PlayerActivity.class);
+        Intent intent = new Intent(getContext(), VlcPlayerActivity.class);
         intent.putExtra("software", software != null && software);
+        intent.putExtra("autoSubs", call.getBoolean("autoSubs", true));
+        String subLang = call.getString("subLang");
+        if (subLang != null) intent.putExtra("subLang", subLang);
         intent.putExtra("items", items.toString());
         intent.putExtra("index", index == null ? 0 : index);
         intent.putExtra("position", (long) ((position == null ? 0.0 : position) * 1000.0));

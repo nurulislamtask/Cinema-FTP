@@ -243,6 +243,19 @@ export const MoreTab: React.FC<Props> = (p) => {
           hint="Turn on only if some movies show a black screen or fail. Slower, but plays more files."
           right={<Toggle on={p.prefs.softwareDecoder} onChange={(v) => p.setPrefs({ softwareDecoder: v })} />}
         />
+        <Line
+          title="Auto subtitles"
+          hint="When a movie has no subtitles, find and add one online automatically."
+          right={<Toggle on={p.prefs.autoSubtitles} onChange={(v) => p.setPrefs({ autoSubtitles: v })} />}
+        />
+        <Line
+          title={`Subtitle language: ${({ eng: 'English', ben: 'Bangla', hin: 'Hindi', ara: 'Arabic', spa: 'Spanish' } as Record<string, string>)[p.prefs.subtitleLang] || p.prefs.subtitleLang}`}
+          hint="Tap to change"
+          onClick={() => {
+            const order = ['eng', 'ben', 'hin', 'ara', 'spa'];
+            p.setPrefs({ subtitleLang: order[(order.indexOf(p.prefs.subtitleLang) + 1) % order.length] });
+          }}
+        />
         <Line title="Player gestures" hint="Swipe left side = brightness · right side = volume · swipe across = seek · double-tap sides = ∓10 s · hold = 2x speed · pinch = zoom." />
       </Section>
 

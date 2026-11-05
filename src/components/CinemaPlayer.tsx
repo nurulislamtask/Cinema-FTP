@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { ParsedFtpItem, convertSrtToVtt, resolvePublicBdixGatewayUrl } from '../utils/ftpParser';
 import { IS_CAPACITOR } from '../utils/platform';
+import { displayTitle } from '../utils/titleClean';
 import {
   probeVideoStreams,
   ProbedAudioTrack,
@@ -217,6 +218,19 @@ export const CinemaPlayerWeb: React.FC<CinemaPlayerProps> = ({
     { id: string; label: string; rawText: string }[]
   >([]);
   const [activeVttUrl, setActiveVttUrl] = useState<string | null>(null);
+
+  // Online subtitles (OpenSubtitles through the local API): searched automatically for this movie / episode
+  const [onlineSubs, setOnlineSubs] = useState<{ link: string; label: string; downloads: number }[]>([]);
+  const [onlineBusy, setOnlineBusy] = useState(false);
+  const [onlineLang, setOnlineLang] = useState<string>(() => {
+    try {
+      return localStorage.getItem('cineftp_sub_lang') || 'eng';
+    } catch {
+      return 'eng';
+    }
+  });
+  const onlineAutoRef = useRef<string>('');
+  const probedSubTracksRef = useRef(0);
 
   // UI state
   const [showControls, setShowControls] = useState(true);
@@ -671,6 +685,46 @@ export const CinemaPlayerWeb: React.FC<CinemaPlayerProps> = ({
     };
   }, [video.id, video.url, video.rawName, initialStartTime]);
 
+  useEffect(() => {
+    if (IS_CAPACITOR) return;
+    const q = displayTitle(video.cleanTitle || video.rawName || '');
+    if (!q) return;
+    let cancelled = false;
+    setOnlineBusy(true);
+    setOnlineSubs([]);
+    const params = new URLSearchParams({
+      q,
+      lang: onlineLang,
+      year: String(video.year || 0),
+      season: String(video.episode !== undefined ? video.season ?? 1 : 0),
+      episode: String(video.episode || 0),
+    });
+    fetch(`/api/subs/search?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => {
+        if (cancelled || !Array.isArray(list)) return;
+        setOnlineSubs(list);
+        // automatic: when the file has no subtitles of its own, add the best online one
+        const key = `${video.id}|${onlineLang}`;
+        if (list.length > 0 && onlineAutoRef.current !== key) {
+          onlineAutoRef.current = key;
+          window.setTimeout(() => {
+            if (cancelled) return;
+            setActiveSubId((cur) => (cur === 'off' && subtitles.length === 0 && probedSubTracksRef.current === 0 ? 'online-0' : cur));
+          }, 3000);
+        }
+      })
+      .catch(() => {})
+      .finally(() => !cancelled && setOnlineBusy(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [video.id, onlineLang]);
+
+  useEffect(() => {
+    probedSubTracksRef.current = probedSubTracks.length;
+  }, [probedSubTracks]);
+
   // Active subtitle WebVTT URL
   useEffect(() => {
     if (activeSubId === 'off') {
@@ -712,6 +766,9 @@ export const CinemaPlayerWeb: React.FC<CinemaPlayerProps> = ({
       setActiveVttUrl(
         `/api/embedded-subtitle?url=${encodeURIComponent(activeSourceUrl)}&subIndex=${subIndex}&start=0`
       );
+    } else if (activeSubId.startsWith('online-')) {
+      const item = onlineSubs[parseInt(activeSubId.slice(7), 10) || 0];
+      if (item) setActiveVttUrl(`/api/subs/vtt?link=${encodeURIComponent(item.link)}&offset=${subOffset}`);
     } else if (activeSubId.startsWith('custom-')) {
       const custom = customSubs.find((c) => c.id === activeSubId);
       if (custom) {
@@ -722,7 +779,7 @@ export const CinemaPlayerWeb: React.FC<CinemaPlayerProps> = ({
         return () => URL.revokeObjectURL(url);
       }
     }
-  }, [activeSubId, subOffset, subtitles, video.url, overrideVideoUrl, customSubs]);
+  }, [activeSubId, subOffset, subtitles, video.url, overrideVideoUrl, customSubs, onlineSubs]);
 
   const runtimeSeconds = useMemo(
     () => parseRuntimeToSeconds(enrichedRuntime || video.runtime),
@@ -1740,7 +1797,51 @@ export const CinemaPlayerWeb: React.FC<CinemaPlayerProps> = ({
                   </button>
                 ))}
 
-                {subtitles.length === 0 && probedSubTracks.length === 0 && customSubs.length === 0 && (
+                {!IS_CAPACITOR && (
+                  <div className="pt-1">
+                    <div className="flex items-center justify-between px-1 pb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                        Online {onlineBusy ? '· searching…' : `· ${onlineSubs.length} found`}
+                      </span>
+                      <div className="flex gap-1">
+                        {[['eng', 'EN'], ['ben', 'BN'], ['hin', 'HI'], ['ara', 'AR'], ['spa', 'ES']].map(([code, label]) => (
+                          <button
+                            key={code}
+                            onClick={() => {
+                              setOnlineLang(code);
+                              try { localStorage.setItem('cineftp_sub_lang', code); } catch {}
+                            }}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              onlineLang === code ? 'bg-[#E50914] text-white' : 'bg-white/10 text-zinc-300 hover:bg-white/20'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {onlineSubs.slice(0, 12).map((sub, i) => {
+                      const id = `online-${i}`;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => {
+                            setActiveSubId(id);
+                            setActiveMenu(null);
+                          }}
+                          className={`mb-1 w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium cursor-pointer transition-colors ${
+                            activeSubId === id ? 'bg-[#E50914] text-white font-semibold' : 'bg-white/5 hover:bg-white/10 text-zinc-300'
+                          }`}
+                        >
+                          <span className="truncate">{sub.label}</span>
+                          {activeSubId === id && <Check className="w-4 h-4 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {subtitles.length === 0 && probedSubTracks.length === 0 && customSubs.length === 0 && onlineSubs.length === 0 && (
                   <p className="text-[11px] text-zinc-400 p-2 text-center bg-white/5 rounded-lg">
                     No online subtitles found. Click "Upload .SRT" to add your own subtitle file!
                   </p>

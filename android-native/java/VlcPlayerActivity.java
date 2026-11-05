@@ -1,10 +1,11 @@
 package com.cineftp.mobile;
 
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.media.AudioManager;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -35,12 +36,15 @@ import org.videolan.libvlc.LibVLC;
 import org.videolan.libvlc.Media;
 import org.videolan.libvlc.MediaPlayer;
 
+import java.io.File;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
- * Fallback player built on libVLC. It decodes practically everything (HEVC 10-bit, odd containers,
- * DTS / TrueHD audio ...) in software, so it is used when ExoPlayer cannot play a file.
+ * CineFTP's one and only phone player (libVLC engine): plays practically every file, hardware decoding
+ * with automatic software fallback, gestures, audio / subtitle track picker, online subtitle search
+ * (and automatic subtitles), speed, aspect ratio, next / previous.
  */
 public class VlcPlayerActivity extends AppCompatActivity {
 
@@ -48,19 +52,47 @@ public class VlcPlayerActivity extends AppCompatActivity {
     private MediaPlayer mp;
     private SurfaceView surface;
     private LinearLayout topBar, bottomBar;
-    private TextView titleView, timeView, playBtn, hud;
+    private TextView titleView, timeView, playBtn, hud, audioBtn, hwBtn, speedBtn, aspectBtn;
     private SeekBar seek;
+    private AudioManager audio;
     private final Handler ui = new Handler(Looper.getMainLooper());
+
+    // queue
     private final ArrayList<String> urls = new ArrayList<>();
     private final ArrayList<String> titles = new ArrayList<>();
+    private final ArrayList<String> queries = new ArrayList<>();
+    private final ArrayList<Integer> years = new ArrayList<>();
+    private final ArrayList<Integer> seasons = new ArrayList<>();
+    private final ArrayList<Integer> episodes = new ArrayList<>();
+    private final ArrayList<List<String>> extSubs = new ArrayList<>();
     private int index = 0;
+    private long pendingStart = 0L;
+
+    // state
     private boolean finishedOnce = false;
     private boolean userSeeking = false;
+    private boolean hardware = true;
+    private boolean surfaceReady = false;
+    private boolean started = false;
+    private boolean playingSeen = false;
+    private boolean triedSoftware = false;
+    private boolean autoSubs = true;
+    private boolean autoSubsDone = false;
+    private String subLang = "eng";
+    private String errorText = null;
     private long lastDuration = 0L;
     private long lastTime = 0L;
-    private long pendingStart = 0L;
     private int aspectMode = 0;
     private final String[] ASPECT = {"Fit", "16:9", "4:3", "Fill"};
+    private int speedIdx = 1;
+    private final float[] SPEEDS = {0.75f, 1f, 1.25f, 1.5f, 2f};
+
+    // gestures
+    private int gesture = 0; // 0 none, 1 brightness, 2 volume, 3 seek
+    private float brightnessNow = 0.5f;
+    private int volumeStart = 0;
+    private long seekBase = 0, seekTarget = 0;
+    private boolean longPress = false;
 
     private final Runnable tick = new Runnable() {
         @Override public void run() {
@@ -80,6 +112,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
         }
     };
     private final Runnable hideBars = () -> setBars(false);
+    private final Runnable hudOff = () -> hud.setVisibility(View.GONE);
 
     @Override
     protected void onCreate(Bundle b) {
@@ -88,16 +121,30 @@ public class VlcPlayerActivity extends AppCompatActivity {
         w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         WindowCompat.setDecorFitsSystemWindows(w, false);
         hideSystemBars();
+        audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 
         try {
-            JSONArray items = new JSONArray(getIntent().getStringExtra("items"));
+            Intent in = getIntent();
+            JSONArray items = new JSONArray(in.getStringExtra("items"));
             for (int i = 0; i < items.length(); i++) {
                 JSONObject o = items.getJSONObject(i);
                 urls.add(o.getString("url"));
                 titles.add(o.optString("title", ""));
+                queries.add(o.optString("query", o.optString("title", "")));
+                years.add(o.optInt("year", 0));
+                seasons.add(o.optInt("season", 0));
+                episodes.add(o.optInt("episode", 0));
+                List<String> subs = new ArrayList<>();
+                JSONArray sa = o.optJSONArray("subtitles");
+                if (sa != null) for (int s = 0; s < sa.length() && s < 12; s++) subs.add(sa.getJSONObject(s).getString("url"));
+                extSubs.add(subs);
             }
-            index = Math.max(0, Math.min(getIntent().getIntExtra("index", 0), urls.size() - 1));
-            pendingStart = Math.max(0L, getIntent().getLongExtra("position", 0L));
+            index = Math.max(0, Math.min(in.getIntExtra("index", 0), urls.size() - 1));
+            pendingStart = Math.max(0L, in.getLongExtra("position", 0L));
+            hardware = !in.getBooleanExtra("software", false);
+            autoSubs = in.getBooleanExtra("autoSubs", true);
+            String sl = in.getStringExtra("subLang");
+            if (sl != null && !sl.isEmpty()) subLang = sl;
         } catch (Exception e) {
             finish();
             return;
@@ -111,7 +158,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
         root.addView(surface, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // top bar
+        // ---- top bar
         topBar = new LinearLayout(this);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{0xCC000000, 0}));
@@ -128,13 +175,19 @@ public class VlcPlayerActivity extends AppCompatActivity {
         tlp.leftMargin = dp(10);
         tlp.rightMargin = dp(10);
         topBar.addView(titleView, tlp);
-        TextView audioBtn = btn("Audio");
+        audioBtn = btn("Audio");
         audioBtn.setOnClickListener(v -> pickTrack(true));
         topBar.addView(audioBtn, margin());
         TextView subBtn = btn("Subs");
-        subBtn.setOnClickListener(v -> pickTrack(false));
+        subBtn.setOnClickListener(v -> subtitleMenu());
         topBar.addView(subBtn, margin());
-        TextView aspectBtn = btn("Fit");
+        TextView ext = btn("Open with");
+        ext.setOnClickListener(v -> openWithOtherPlayer());
+        topBar.addView(ext, margin());
+        hwBtn = btn(hardware ? "HW" : "SW");
+        hwBtn.setOnClickListener(v -> { hardware = !hardware; hwBtn.setText(hardware ? "HW" : "SW"); reloadHere(); });
+        topBar.addView(hwBtn, margin());
+        aspectBtn = btn("Fit");
         aspectBtn.setOnClickListener(v -> {
             aspectMode = (aspectMode + 1) % ASPECT.length;
             aspectBtn.setText(ASPECT[aspectMode]);
@@ -144,7 +197,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
         root.addView(topBar, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
 
-        // bottom bar
+        // ---- bottom bar
         bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
         bottomBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, new int[]{0xCC000000, 0}));
@@ -154,10 +207,11 @@ public class VlcPlayerActivity extends AppCompatActivity {
             @Override public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
                 if (fromUser) timeView.setText(fmt(p * 1000L) + " / " + fmt(lastDuration));
             }
-            @Override public void onStartTrackingTouch(SeekBar s) { userSeeking = true; }
+            @Override public void onStartTrackingTouch(SeekBar s) { userSeeking = true; ui.removeCallbacks(hideBars); }
             @Override public void onStopTrackingTouch(SeekBar s) {
                 userSeeking = false;
                 if (mp != null) mp.setTime(s.getProgress() * 1000L);
+                ui.postDelayed(hideBars, 4000);
             }
         });
         bottomBar.addView(seek);
@@ -170,7 +224,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
         back.setOnClickListener(v -> skip(-10000));
         row.addView(back, margin());
         playBtn = btn("❚❚");
-        playBtn.setOnClickListener(v -> { if (mp != null) { if (mp.isPlaying()) mp.pause(); else mp.play(); } });
+        playBtn.setOnClickListener(v -> toggle());
         row.addView(playBtn, margin());
         TextView fwd = btn("10 ↻");
         fwd.setOnClickListener(v -> skip(10000));
@@ -178,6 +232,13 @@ public class VlcPlayerActivity extends AppCompatActivity {
         TextView next = btn("⏭");
         next.setOnClickListener(v -> go(index + 1));
         row.addView(next, margin());
+        speedBtn = btn("1x");
+        speedBtn.setOnClickListener(v -> {
+            speedIdx = (speedIdx + 1) % SPEEDS.length;
+            if (mp != null) mp.setRate(SPEEDS[speedIdx]);
+            speedBtn.setText(SPEEDS[speedIdx] + "x");
+        });
+        row.addView(speedBtn, margin());
         timeView = new TextView(this);
         timeView.setTextColor(Color.WHITE);
         timeView.setGravity(Gravity.END);
@@ -188,9 +249,9 @@ public class VlcPlayerActivity extends AppCompatActivity {
 
         hud = new TextView(this);
         hud.setTextColor(Color.WHITE);
-        hud.setTextSize(16f);
+        hud.setTextSize(18f);
         hud.setGravity(Gravity.CENTER);
-        hud.setPadding(dp(18), dp(10), dp(18), dp(10));
+        hud.setPadding(dp(20), dp(12), dp(20), dp(12));
         GradientDrawable hb = new GradientDrawable();
         hb.setColor(0xB0000000);
         hb.setCornerRadius(dp(14));
@@ -199,38 +260,30 @@ public class VlcPlayerActivity extends AppCompatActivity {
         root.addView(hud, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
 
-        // taps: single = show / hide controls, double tap sides = +-10s, middle = play / pause
-        final GestureDetector gd = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override public boolean onSingleTapConfirmed(MotionEvent e) { setBars(topBar.getVisibility() != View.VISIBLE); return true; }
-            @Override public boolean onDoubleTap(MotionEvent e) {
-                float x = e.getX() / Math.max(1, surface.getWidth());
-                if (x < 0.35f) skip(-10000);
-                else if (x > 0.65f) skip(10000);
-                else if (mp != null) { if (mp.isPlaying()) mp.pause(); else mp.play(); }
-                return true;
-            }
-        });
-        surface.setOnTouchListener((v, e) -> { gd.onTouchEvent(e); return true; });
+        setupGestures();
 
         try {
             ArrayList<String> opts = new ArrayList<>();
             opts.add("--no-drop-late-frames");
             opts.add("--no-skip-frames");
             opts.add("--network-caching=3000");
-            opts.add("--avcodec-hw=any");
+            opts.add("--audio-time-stretch");
             libVlc = new LibVLC(this, opts);
             mp = new MediaPlayer(libVlc);
         } catch (Throwable t) {
-            Toast.makeText(this, "Player engine failed: " + t.getMessage(), Toast.LENGTH_LONG).show();
+            errorText = "Player engine failed: " + t.getMessage();
+            Toast.makeText(this, errorText, Toast.LENGTH_LONG).show();
             finish();
             return;
         }
 
         surface.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override public void surfaceCreated(SurfaceHolder h) {
+                if (mp == null) return;
                 mp.getVLCVout().setVideoView(surface);
                 mp.getVLCVout().attachViews();
                 mp.getVLCVout().setWindowSize(surface.getWidth(), surface.getHeight());
+                surfaceReady = true;
                 if (!started) { started = true; load(index, pendingStart); }
             }
             @Override public void surfaceChanged(SurfaceHolder h, int f, int w2, int h2) {
@@ -243,18 +296,21 @@ public class VlcPlayerActivity extends AppCompatActivity {
         });
 
         mp.setEventListener(event -> {
-            if (event.type == MediaPlayer.Event.EndReached) {
-                if (index + 1 < urls.size()) go(index + 1);
-                else finish();
-            } else if (event.type == MediaPlayer.Event.EncounteredError) {
-                showHud("Cannot play this file (VLC engine)");
-                errorText = "VLC engine could not play this file";
-            } else if (event.type == MediaPlayer.Event.Playing) {
-                if (!hintShown) {
-                    hintShown = true;
-                    int n = mp.getAudioTracks() == null ? 0 : mp.getAudioTracks().length;
-                    if (n > 2) showHud(n - 1 + " audio tracks – tap Audio to choose");
-                }
+            switch (event.type) {
+                case MediaPlayer.Event.Playing:
+                    if (!playingSeen) { playingSeen = true; onFirstPlaying(); }
+                    break;
+                case MediaPlayer.Event.ESAdded:
+                    updateAudioLabel();
+                    break;
+                case MediaPlayer.Event.EndReached:
+                    if (index + 1 < urls.size()) go(index + 1); else finish();
+                    break;
+                case MediaPlayer.Event.EncounteredError:
+                    onEngineError();
+                    break;
+                default:
+                    break;
             }
         });
 
@@ -262,31 +318,102 @@ public class VlcPlayerActivity extends AppCompatActivity {
         ui.postDelayed(hideBars, 3500);
     }
 
-    private boolean started = false;
-    private boolean hintShown = false;
-    private String errorText = null;
+    // ------------------------------------------------------------ playback
 
     private void load(int i, long startMs) {
         if (mp == null || i < 0 || i >= urls.size()) return;
         index = i;
-        hintShown = false;
+        playingSeen = false;
+        triedSoftware = !hardware;
+        autoSubsDone = false;
+        errorText = null;
         titleView.setText(titles.get(i));
+        startMedia(startMs);
+        // slow / silent failures: if nothing plays in 25 s, retry with software decoding
+        final int mine = ++loadToken;
+        ui.postDelayed(() -> {
+            if (mine == loadToken && !playingSeen && !triedSoftware) {
+                triedSoftware = true;
+                hardware = false;
+                hwBtn.setText("SW");
+                showHud("Trying software decoder…");
+                startMedia(lastTime > 0 ? lastTime : startMs);
+            }
+        }, 25000);
+    }
+    private int loadToken = 0;
+
+    private void startMedia(long startMs) {
         try {
-            Media m = new Media(libVlc, Uri.parse(urls.get(i)));
+            Media m = new Media(libVlc, Uri.parse(urls.get(index)));
+            m.setHWDecoderEnabled(hardware, false);
             m.addOption(":network-caching=3000");
             if (startMs > 1000) m.addOption(":start-time=" + (startMs / 1000.0));
             mp.setMedia(m);
             m.release();
             mp.play();
+            mp.setRate(SPEEDS[speedIdx]);
         } catch (Throwable t) {
             errorText = String.valueOf(t.getMessage());
             showHud("Cannot play: " + t.getMessage());
         }
     }
 
+    private void reloadHere() {
+        playingSeen = false;
+        showHud(hardware ? "Hardware decoder" : "Software decoder");
+        startMedia(Math.max(0L, lastTime));
+    }
+
+    private void onEngineError() {
+        if (hardware && !triedSoftware) {
+            triedSoftware = true;
+            hardware = false;
+            hwBtn.setText("SW");
+            showHud("Trying software decoder…");
+            ui.post(() -> startMedia(Math.max(0L, lastTime)));
+            return;
+        }
+        errorText = "This file could not be played";
+        setBars(true);
+        showHud("Cannot play this file.\nTry “Open with” to use another app.");
+    }
+
+    private void onFirstPlaying() {
+        updateAudioLabel();
+        // subtitle files that sit next to the video on the server
+        for (String u : extSubs.get(index)) {
+            try { mp.addSlave(Media.Slave.Type.Subtitle, Uri.parse(u), false); } catch (Throwable ignored) { }
+        }
+        if (autoSubs && !queries.get(index).isEmpty()) {
+            final int mine = loadToken;
+            ui.postDelayed(() -> { if (mine == loadToken) autoSubtitle(); }, 4000);
+        }
+    }
+
+    private int realTracks(MediaPlayer.TrackDescription[] l) {
+        int n = 0;
+        if (l != null) for (MediaPlayer.TrackDescription t : l) if (t.id >= 0) n++;
+        return n;
+    }
+
+    private void updateAudioLabel() {
+        if (mp == null) return;
+        int n = realTracks(mp.getAudioTracks());
+        audioBtn.setText(n > 1 ? "Audio (" + n + ")" : "Audio");
+        if (n > 1 && !audioHint) { audioHint = true; showHud(n + " audio tracks – tap Audio to choose"); }
+    }
+    private boolean audioHint = false;
+
+    private void toggle() {
+        if (mp == null) return;
+        if (mp.isPlaying()) mp.pause(); else mp.play();
+    }
+
     private void go(int i) {
         if (i < 0 || i >= urls.size()) return;
         lastTime = 0;
+        audioHint = false;
         load(i, 0);
     }
 
@@ -301,30 +428,207 @@ public class VlcPlayerActivity extends AppCompatActivity {
     private void applyAspect() {
         if (mp == null) return;
         switch (aspectMode) {
-            case 1: mp.setAspectRatio("16:9"); mp.setScale(0f); break;
-            case 2: mp.setAspectRatio("4:3"); mp.setScale(0f); break;
-            case 3: mp.setAspectRatio(null); mp.setScale(0f); break;
-            default: mp.setAspectRatio(null); mp.setScale(0f);
+            case 1: mp.setAspectRatio("16:9"); break;
+            case 2: mp.setAspectRatio("4:3"); break;
+            default: mp.setAspectRatio(null);
         }
+        mp.setScale(0f);
+        if (aspectMode == 3) { mp.setAspectRatio(surface.getWidth() + ":" + surface.getHeight()); }
     }
+
+    // ------------------------------------------------------------ tracks / subtitles
 
     private void pickTrack(final boolean audioTracks) {
         if (mp == null) return;
         final MediaPlayer.TrackDescription[] list = audioTracks ? mp.getAudioTracks() : mp.getSpuTracks();
-        if (list == null || list.length == 0) {
-            Toast.makeText(this, audioTracks ? "No audio tracks" : "No subtitle tracks", Toast.LENGTH_SHORT).show();
+        if (list == null || list.length == 0 || (audioTracks && realTracks(list) == 0)) {
+            Toast.makeText(this, audioTracks ? "No audio tracks" : "No subtitle tracks yet", Toast.LENGTH_SHORT).show();
             return;
         }
+        final int current = audioTracks ? mp.getAudioTrack() : mp.getSpuTrack();
         String[] names = new String[list.length];
-        for (int i = 0; i < list.length; i++) names[i] = list[i].name == null ? ("Track " + i) : list[i].name;
+        for (int i = 0; i < list.length; i++) {
+            String n = list[i].name == null ? ("Track " + i) : list[i].name;
+            names[i] = n + (list[i].id == current ? "  ✓" : "");
+        }
         new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
-            .setTitle(audioTracks ? "Audio track" : "Subtitles")
+            .setTitle(audioTracks ? "Audio track" : "Subtitle track")
             .setItems(names, (d, which) -> {
                 if (audioTracks) mp.setAudioTrack(list[which].id);
                 else mp.setSpuTrack(list[which].id);
             })
             .show();
     }
+
+    private void subtitleMenu() {
+        final String[] opts = {"Choose subtitle track", "Search online (" + langName(subLang) + ")",
+            "Search online – other language", "Subtitles off"};
+        new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle("Subtitles")
+            .setItems(opts, (d, which) -> {
+                if (which == 0) pickTrack(false);
+                else if (which == 1) searchSubs(subLang, false);
+                else if (which == 2) {
+                    final String[] names = {"English", "Bangla", "Hindi", "Arabic", "Spanish"};
+                    final String[] codes = {"eng", "ben", "hin", "ara", "spa"};
+                    new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+                        .setTitle("Language")
+                        .setItems(names, (d2, w2) -> searchSubs(codes[w2], false))
+                        .show();
+                } else if (mp != null) mp.setSpuTrack(-1);
+            })
+            .show();
+    }
+
+    private static String langName(String code) {
+        switch (code) {
+            case "ben": return "Bangla";
+            case "hin": return "Hindi";
+            case "ara": return "Arabic";
+            case "spa": return "Spanish";
+            default: return "English";
+        }
+    }
+
+    private void autoSubtitle() {
+        if (mp == null || autoSubsDone) return;
+        autoSubsDone = true;
+        // the file already carries subtitles (embedded or from the server): leave them alone
+        if (realTracks(mp.getSpuTracks()) > 0) return;
+        searchSubs(subLang, true);
+    }
+
+    private void searchSubs(final String lang, final boolean auto) {
+        final int idx = index;
+        final String q = queries.get(idx);
+        if (q.isEmpty()) {
+            if (!auto) Toast.makeText(this, "No title to search for", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!auto) Toast.makeText(this, "Searching subtitles…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                final List<SubtitleFinder.Result> res =
+                    SubtitleFinder.search(q, years.get(idx), seasons.get(idx), episodes.get(idx), lang);
+                runOnUiThread(() -> {
+                    if (isFinishing() || idx != index) return;
+                    if (res.isEmpty()) {
+                        if (!auto) Toast.makeText(this, "No subtitles found for this title", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    if (auto) { downloadSub(res.get(0), true); return; }
+                    String[] labels = new String[res.size()];
+                    for (int i = 0; i < res.size(); i++) labels[i] = res.get(i).label;
+                    new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+                        .setTitle(res.size() + " subtitles found")
+                        .setItems(labels, (d, which) -> downloadSub(res.get(which), false))
+                        .show();
+                });
+            } catch (final Exception e) {
+                runOnUiThread(() -> { if (!auto) Toast.makeText(this, "Subtitle search failed: " + e.getMessage(), Toast.LENGTH_LONG).show(); });
+            }
+        }).start();
+    }
+
+    private void downloadSub(final SubtitleFinder.Result r, final boolean auto) {
+        final int idx = index;
+        new Thread(() -> {
+            try {
+                final File f = SubtitleFinder.download(this, r.link);
+                runOnUiThread(() -> {
+                    if (isFinishing() || mp == null || idx != index) return;
+                    mp.addSlave(Media.Slave.Type.Subtitle, Uri.fromFile(f), true);
+                    showHud((auto ? "Auto subtitle: " : "Subtitle: ") + r.label);
+                });
+            } catch (final Exception e) {
+                runOnUiThread(() -> { if (!auto) Toast.makeText(this, "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show(); });
+            }
+        }).start();
+    }
+
+    private void openWithOtherPlayer() {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(Uri.parse(urls.get(index)), "video/*");
+            if (mp != null) mp.pause();
+            startActivity(Intent.createChooser(i, "Open with"));
+        } catch (Exception e) {
+            Toast.makeText(this, "No other player found", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // ------------------------------------------------------------ gestures
+
+    private void setupGestures() {
+        final GestureDetector gd = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override public boolean onDown(MotionEvent e) { gesture = 0; return true; }
+            @Override public boolean onSingleTapConfirmed(MotionEvent e) {
+                setBars(topBar.getVisibility() != View.VISIBLE);
+                return true;
+            }
+            @Override public boolean onDoubleTap(MotionEvent e) {
+                float x = e.getX() / Math.max(1, surface.getWidth());
+                if (x < 0.35f) skip(-10000);
+                else if (x > 0.65f) skip(10000);
+                else toggle();
+                return true;
+            }
+            @Override public void onLongPress(MotionEvent e) {
+                if (mp == null) return;
+                longPress = true;
+                mp.setRate(2f);
+                showHud("2x");
+            }
+            @Override public boolean onScroll(MotionEvent e1, MotionEvent e2, float dx, float dy) {
+                if (e1 == null || mp == null || longPress) return false;
+                int w = Math.max(1, surface.getWidth()), h = Math.max(1, surface.getHeight());
+                if (gesture == 0) {
+                    if (Math.abs(e2.getX() - e1.getX()) > Math.abs(e2.getY() - e1.getY())) {
+                        gesture = 3;
+                        seekBase = Math.max(0L, mp.getTime());
+                    } else if (e1.getX() < w / 2f) {
+                        gesture = 1;
+                        float cur = getWindow().getAttributes().screenBrightness;
+                        brightnessNow = cur < 0 ? 0.5f : cur;
+                    } else {
+                        gesture = 2;
+                        volumeStart = audio.getStreamVolume(AudioManager.STREAM_MUSIC);
+                    }
+                }
+                float dyTotal = e1.getY() - e2.getY();
+                if (gesture == 1) {
+                    float v = Math.max(0.02f, Math.min(1f, brightnessNow + dyTotal / h));
+                    WindowManager.LayoutParams lp = getWindow().getAttributes();
+                    lp.screenBrightness = v;
+                    getWindow().setAttributes(lp);
+                    showHud("☀ " + Math.round(v * 100) + "%");
+                } else if (gesture == 2) {
+                    int max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                    int v = Math.max(0, Math.min(max, volumeStart + Math.round(dyTotal / h * max * 1.2f)));
+                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0);
+                    showHud("🔊 " + Math.round(v * 100f / max) + "%");
+                } else if (gesture == 3) {
+                    long delta = Math.round((e2.getX() - e1.getX()) / w * 120000f);
+                    seekTarget = Math.max(0L, seekBase + delta);
+                    if (lastDuration > 0) seekTarget = Math.min(seekTarget, lastDuration - 1000);
+                    showHud(fmt(seekTarget) + "  (" + (delta >= 0 ? "+" : "-") + Math.abs(delta / 1000) + "s)");
+                }
+                return true;
+            }
+        });
+        surface.setOnTouchListener((v, e) -> {
+            gd.onTouchEvent(e);
+            if (e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                if (gesture == 3 && mp != null) mp.setTime(seekTarget);
+                if (longPress && mp != null) { mp.setRate(SPEEDS[speedIdx]); hud.setVisibility(View.GONE); }
+                longPress = false;
+                gesture = 0;
+            }
+            return true;
+        });
+    }
+
+    // ------------------------------------------------------------ ui helpers
 
     private void setBars(boolean show) {
         ui.removeCallbacks(hideBars);
@@ -339,7 +643,6 @@ public class VlcPlayerActivity extends AppCompatActivity {
         ui.removeCallbacks(hudOff);
         ui.postDelayed(hudOff, 2200);
     }
-    private final Runnable hudOff = () -> hud.setVisibility(View.GONE);
 
     private TextView btn(String text) {
         TextView b = new TextView(this);
@@ -375,6 +678,14 @@ public class VlcPlayerActivity extends AppCompatActivity {
         c.hide(WindowInsetsCompat.Type.systemBars());
         c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
     }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemBars();
+    }
+
+    // ------------------------------------------------------------ lifecycle
 
     @Override
     public void finish() {

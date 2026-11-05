@@ -58,29 +58,22 @@ import shutil
 MEDIA3 = '1.9.0'
 java_dir = os.path.join(root, 'android', 'app', 'src', 'main', 'java', 'com', 'cineftp', 'mobile')
 os.makedirs(java_dir, exist_ok=True)
-for f in ('MainActivity.java', 'NativePlayerPlugin.java', 'PlayerActivity.java', 'SubtitleFinder.java', 'VlcPlayerActivity.java'):
+for f in ('MainActivity.java', 'NativePlayerPlugin.java', 'SubtitleFinder.java', 'VlcPlayerActivity.java'):
     shutil.copyfile(os.path.join(root, 'android-native', 'java', f), os.path.join(java_dir, f))
 
 m = open(manifest, encoding='utf8').read()
-if 'PlayerActivity' not in m:
-    act = ('<activity android:name=".PlayerActivity" android:exported="false" '
-           'android:theme="@style/Theme.AppCompat.NoActionBar" '
-           'android:screenOrientation="sensorLandscape" '
-           'android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density" />')
+if 'VlcPlayerActivity' not in m:
     vlc = ('<activity android:name=".VlcPlayerActivity" android:exported="false" '
            'android:theme="@style/Theme.AppCompat.NoActionBar" '
            'android:screenOrientation="sensorLandscape" '
            'android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density" />')
-    m = m.replace('</application>', '    ' + act + '\n    ' + vlc + '\n    </application>', 1)
+    m = m.replace('</application>', '    ' + vlc + '\n    </application>', 1)
 open(manifest, 'w', encoding='utf8').write(m)
 
 app_gradle = os.path.join(root, 'android', 'app', 'build.gradle')
 g = open(app_gradle, encoding='utf8').read()
-if 'media3-exoplayer' not in g:
-    deps = ('    implementation "androidx.media3:media3-exoplayer:%s"\n'
-            '    implementation "androidx.media3:media3-ui:%s"\n'
-            '    implementation "org.jellyfin.media3:media3-ffmpeg-decoder:%s+1"\n'
-            '    implementation "org.videolan.android:libvlc-all:3.6.0"\n') % (MEDIA3, MEDIA3, MEDIA3)
+if 'libvlc-all' not in g:
+    deps = '    implementation "org.videolan.android:libvlc-all:3.6.0"\n'
     g = re.sub(r'dependencies\s*\{', lambda mo: mo.group(0) + '\n' + deps, g, count=1)
     open(app_gradle, 'w', encoding='utf8').write(g)
 

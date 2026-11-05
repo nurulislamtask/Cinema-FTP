@@ -7,6 +7,8 @@ export interface MobilePrefs {
   showContinue: boolean;
   resumePlayback: boolean;
   softwareDecoder: boolean;
+  autoSubtitles: boolean;
+  subtitleLang: string; // opensubtitles code: eng, ben, hin ...
   homeHidden: string[]; // source ids that are not shown on Home
 }
 
@@ -15,6 +17,8 @@ const DEFAULTS: MobilePrefs = {
   showContinue: true,
   resumePlayback: true,
   softwareDecoder: false,
+  autoSubtitles: true,
+  subtitleLang: 'eng',
   homeHidden: [],
 };
 

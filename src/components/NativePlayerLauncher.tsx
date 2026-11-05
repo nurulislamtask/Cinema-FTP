@@ -122,7 +122,7 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
         const startAt = initialStartTime > 0 ? initialStartTime : saved && prefs.resumePlayback ? saved.t : 0;
 
         setStatus('Starting…');
-        const res = await NativePlayer.play({ items: queue.map((q) => q.item), index, position: startAt, software: prefs.softwareDecoder });
+        const res = await NativePlayer.play({ items: queue.map((q) => q.item), index, position: startAt, software: prefs.softwareDecoder, autoSubs: prefs.autoSubtitles, subLang: prefs.subtitleLang });
         if (!alive) return;
 
         const playedId = queue[Math.min(res.index, queue.length - 1)]?.id || video.id;

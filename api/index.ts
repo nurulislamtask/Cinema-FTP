@@ -5,6 +5,7 @@ import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { spawn, spawnSync } from 'child_process';
 import http from 'http';
+import zlib from 'zlib';
 import https from 'https';
 import net from 'net';
 import { Readable } from 'stream';
@@ -2735,6 +2736,67 @@ app.get(['/api/subtitle', '/subtitle'], async (req, res) => {
   } catch {
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.send(`WEBVTT\n\n`);
+  }
+});
+
+/**
+ * API: online subtitle search (OpenSubtitles REST, no key needed) for a movie / episode
+ */
+app.get(['/api/subs/search', '/subs/search'], async (req, res) => {
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const year = parseInt(String(req.query.year || '0'), 10) || 0;
+  const season = parseInt(String(req.query.season || '0'), 10) || 0;
+  const episode = parseInt(String(req.query.episode || '0'), 10) || 0;
+  const lang = String(req.query.lang || 'eng').replace(/[^a-z,]/gi, '').slice(0, 20) || 'eng';
+  if (!q) {
+    res.json([]);
+    return;
+  }
+  try {
+    let p = 'https://rest.opensubtitles.org/search/';
+    if (episode > 0) p += `episode-${episode}/`;
+    p += `query-${encodeURIComponent(q)}/`;
+    if (season > 0) p += `season-${season}/`;
+    p += `sublanguageid-${lang}`;
+    const r = await fetch(p, { headers: { 'User-Agent': 'TemporaryUserAgent' }, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const arr: any[] = (await r.json()) as any[];
+    const out = arr
+      .filter((o) => o?.SubDownloadLink && String(o.SubFormat || 'srt').toLowerCase() === 'srt')
+      .map((o) => ({
+        link: String(o.SubDownloadLink),
+        label: String(o.MovieReleaseName || o.SubFileName || o.MovieName || 'Subtitle'),
+        downloads: parseInt(String(o.SubDownloadsCnt || '0'), 10) || 0,
+        exactYear: !!year && parseInt(String(o.MovieYear || '0'), 10) === year,
+        lang: String(o.ISO639 || lang),
+      }))
+      .sort((a, b) => (a.exactYear === b.exactYear ? b.downloads - a.downloads : a.exactYear ? -1 : 1))
+      .slice(0, 20);
+    res.json(out);
+  } catch (e: any) {
+    res.status(502).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
+ * API: download one online subtitle (gz) and return it as WebVTT
+ */
+app.get(['/api/subs/vtt', '/subs/vtt'], async (req, res) => {
+  const link = String(req.query.link || '');
+  const offset = parseFloat(String(req.query.offset || '0')) || 0;
+  res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+  try {
+    const u = new URL(link);
+    if (!/(^|\.)opensubtitles\.(org|com)$/i.test(u.hostname)) throw new Error('host not allowed');
+    const r = await fetch(link, { headers: { 'User-Agent': 'TemporaryUserAgent' }, signal: AbortSignal.timeout(20000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    let buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b) buf = zlib.gunzipSync(buf);
+    let text = buf.toString('utf8');
+    if (text.includes('\uFFFD')) text = buf.toString('latin1');
+    res.send(convertSrtToVtt(text.replace(/^\uFEFF/, ''), offset));
+  } catch {
+    res.send('WEBVTT\n\n');
   }
 });
 
