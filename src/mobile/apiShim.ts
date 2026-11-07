@@ -4,6 +4,7 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import {
   parseDirectoryHtml,
+  resolvePublicBdixGatewayUrl,
   extractMediaMetadata,
   formatBytes,
   buildBreadcrumbs,
@@ -159,24 +160,48 @@ async function browse(rawUrl: string): Promise<unknown> {
     };
   }
 
-  try {
-    const { status, text, url: finalUrl } = await http(url, {
+  // 1) the address as given (private BDIX servers only answer on the right network)
+  // 2) when that does not answer, the public mirror of the same folder
+  const tryListing = async (target: string, timeoutMs: number) => {
+    const { status, text, url: finalUrl } = await http(target, {
       headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
-      timeoutMs: 20000,
+      timeoutMs,
     });
-    if (status >= 400) return { error: `Server answered HTTP ${status}`, targetUrl: url };
-
+    if (status >= 400) throw new Error(`Server answered HTTP ${status}`);
     const result = parseDirectoryHtml(text, finalUrl, 'backend');
     if (result.isH5ai && result.items.length === 0) {
       const h5 = await h5aiJson(finalUrl);
       if (h5.length > 0) result.items = h5;
     }
-    if (result.items.length > 0) return result;
-    return { error: 'No media items found at this URL.', targetUrl: url };
-  } catch (err: any) {
-    return { error: err?.message || 'Failed to connect to server', targetUrl: url };
+    if (result.items.length === 0) throw new Error('No media items found at this URL.');
+    return result;
+  };
+
+  const host = parsed.hostname;
+  const isPrivate = /^(172\.(1[6-9]|2\d|3[01])|10|192\.168)\./.test(host);
+  const mirror = isPrivate ? resolvePublicBdixGatewayUrl(url, true) : null;
+  const mirrorUrl = mirror && mirror !== 'PORTAL_ROOT' ? mirror : null;
+
+  let lastErr = '';
+  const order: Array<[string, number]> = [];
+  if (mirrorUrl && Date.now() < privateDownUntil) order.push([mirrorUrl, 15000], [url, 6000]);
+  else {
+    order.push([url, mirrorUrl ? 6000 : 20000]);
+    if (mirrorUrl) order.push([mirrorUrl, 15000]);
   }
+  for (const [target, t] of order) {
+    try {
+      const r = await tryListing(target, t);
+      if (target === url) privateDownUntil = 0;
+      else privateDownUntil = Date.now() + 3 * 60 * 1000;
+      return r;
+    } catch (err: any) {
+      lastErr = err?.message || 'Failed to connect to server';
+    }
+  }
+  return { error: lastErr, targetUrl: url };
 }
+let privateDownUntil = 0;
 
 const metadataCache = new Map<string, unknown>();
 

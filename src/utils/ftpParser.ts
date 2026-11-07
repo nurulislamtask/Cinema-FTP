@@ -912,10 +912,10 @@ export function isPrivateOrBdixUrl(urlStr: string): boolean {
  * Translate private local BDIX LAN URLs (such as DhakaFlix 172.16.50.7, 172.16.50.14, 172.16.50.12, 172.16.50.9, 172.16.50.4)
  * to the live publicly routable BDIX HTTPS server cluster (server2.ftpbd.net, server3.ftpbd.net, etc.)
  */
-export function resolvePublicBdixGatewayUrl(rawUrl: string): string | null {
-  // Desktop (Electron) app: talk to private LAN servers directly instead of public mirrors.
-  if (typeof navigator !== 'undefined' && /Electron\//i.test(navigator.userAgent)) return null;
-  if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) return null; // Android app
+export function resolvePublicBdixGatewayUrl(rawUrl: string, force = false): string | null {
+  // Desktop / Android apps talk to the private LAN servers directly; `force` is the fallback when those do not answer.
+  if (!force && typeof navigator !== 'undefined' && /Electron\//i.test(navigator.userAgent)) return null;
+  if (!force && typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) return null;
   try {
     const u = new URL(rawUrl);
     const host = u.hostname.toLowerCase();
