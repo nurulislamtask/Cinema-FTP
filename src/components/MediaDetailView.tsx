@@ -23,6 +23,7 @@ import {
   Radio,
 } from 'lucide-react';
 import { ParsedFtpItem } from '../utils/ftpParser';
+import { withTimeout } from '../utils/withTimeout';
 import { useGuide, episodeName, EpisodeThumb } from '../mobile/episodeGuide';
 import {
   SeasonFolderInfo,
@@ -65,6 +66,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
   const [seasons, setSeasons] = useState<SeasonFolderInfo[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [episodes, setEpisodes] = useState<ParsedFtpItem[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
   const guide = useGuide((item.cleanTitle || item.rawName).split(' · ')[0]);
   const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
 
@@ -93,9 +96,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
+    setLoadError(false);
 
     if (isSeries) {
-      crawlSeriesSeasons(item)
+      withTimeout(crawlSeriesSeasons(item), 40000, 'server timeout')
         .then((res) => {
           if (cancelled) return;
           setSeasons(res.seasons);
@@ -111,6 +115,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
         })
         .catch((err) => {
           console.warn('Error crawling seasons:', err);
+          if (!cancelled) setLoadError(true);
         })
         .finally(() => {
           if (!cancelled) setIsLoading(false);
@@ -138,7 +143,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
           setMovieFiles([directItem]);
           setIsLoading(false);
         } else {
-          resolvePlayableFromFolder(item)
+          withTimeout(resolvePlayableFromFolder(item), 40000, 'server timeout')
             .then((res) => {
               if (cancelled) return;
               if (res.primaryVideo && !res.primaryVideo.isDirectory && /\.(mp4|mkv|webm|avi|mov|ts|m4v)(\?.*)?$/i.test(res.primaryVideo.url)) {
@@ -161,6 +166,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
             .catch((err) => {
               console.warn('Error resolving movie folder:', err);
               if (!cancelled) {
+                setLoadError(true);
                 setResolvedMovie(null);
                 setMovieFiles([]);
               }
@@ -175,7 +181,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [item.id, item.url, isSeries]);
+  }, [item.id, item.url, isSeries, retryTick]);
 
   const handleSelectSeason = async (season: SeasonFolderInfo) => {
     setSelectedSeasonId(season.id);
@@ -403,7 +409,14 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
             {/* Main Action Buttons Row */}
             <div className="flex flex-wrap items-center gap-3 pt-3">
               {/* Primary Play Button */}
-              {isLoading ? (
+              {loadError && !isLoading ? (
+                <button
+                  onClick={() => setRetryTick((n) => n + 1)}
+                  className="bg-red-500/90 text-white font-semibold text-xs sm:text-sm px-6 py-2.5 rounded-lg flex items-center gap-2 shadow-lg"
+                >
+                  <span>Server not responding — Tap to retry</span>
+                </button>
+              ) : isLoading ? (
                 <button
                   disabled
                   className="bg-[#E5A00D]/70 text-black font-semibold text-xs sm:text-sm px-6 py-2.5 rounded-lg flex items-center gap-2 shadow-lg cursor-not-allowed opacity-80"
@@ -615,6 +628,12 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
               <div className="py-12 flex flex-col items-center justify-center gap-2 text-zinc-400">
                 <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
                 <span className="text-xs font-mono">Loading episode files from FTP...</span>
+              </div>
+            )}
+
+            {loadError && !isLoading && episodes.length === 0 && (
+              <div className="py-10 text-center text-xs font-mono text-red-300">
+                The server did not answer in time. Check your internet / network (some servers only work on their own ISP), then tap retry.
               </div>
             )}
 

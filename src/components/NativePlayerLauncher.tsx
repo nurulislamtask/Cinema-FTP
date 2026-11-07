@@ -7,6 +7,7 @@ import { displayTitle } from '../utils/titleClean';
 import { registerBack } from '../mobile/backStack';
 import { playerEpisodeTitle } from '../mobile/episodeGuide';
 import { readPrefs } from '../mobile/prefs';
+import { withTimeout } from '../utils/withTimeout';
 import { resolvePlayableFromFolder, getCachedPlayableUrl, saveCachedPlayableUrl } from '../services/ftpClient';
 
 const DIRECT_VIDEO = /\.(mp4|mkv|webm|avi|mov|ts|m4v|m2ts|wmv|flv)(\?.*)?$/i;
@@ -81,7 +82,7 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
           if (cached && DIRECT_VIDEO.test(cached)) url = cached;
           else {
             setStatus('Finding the video file…');
-            const playable = await resolvePlayableFromFolder(video);
+            const playable = await withTimeout(resolvePlayableFromFolder(video), 30000, 'server timeout');
             const found = playable?.primaryVideo?.url;
             if (!found || !DIRECT_VIDEO.test(found)) throw new Error('no file');
             url = found;
