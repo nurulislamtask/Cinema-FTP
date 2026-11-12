@@ -15,6 +15,8 @@ export function useLibrary(sources: AppSource[]) {
   const [progress, setProgress] = useState('');
   const [updatedAt, setUpdatedAt] = useState(0);
   const run = useRef(0);
+  const itemsRef = useRef<ParsedFtpItem[]>([]);
+  itemsRef.current = items;
   const sourcesRef = useRef(sources);
   sourcesRef.current = sources;
   const key = sources.map((s) => `${s.id}|${s.url}|${s.type}`).join('\n');
@@ -26,13 +28,43 @@ export function useLibrary(sources: AppSource[]) {
     const sig = list.map((s) => `${s.id}|${s.url}|${s.type}`).join('\n');
     setScanning(true);
 
-    const combined: ParsedFtpItem[] = [];
-    const seen = new Set<string>();
+    // What we knew before stays until a server has answered completely: a slow / offline / half-read server
+    // must never make titles disappear (they used to vanish and come back on the next scan).
+    const prev = itemsRef.current;
+    const fresh = new Map<string, ParsedFtpItem[]>();
+    const status = new Map<string, 'run' | 'ok' | 'fail'>();
+    list.forEach((s) => {
+      fresh.set(s.id, []);
+      status.set(s.id, 'run');
+    });
+    const compose = (): ParsedFtpItem[] => {
+      const out: ParsedFtpItem[] = [];
+      const ids = new Set<string>();
+      for (const src of list) {
+        const f = fresh.get(src.id) || [];
+        const old = prev.filter((p) => p.sourceServerUrl === src.url);
+        let use: ParsedFtpItem[];
+        if (status.get(src.id) === 'ok' && (old.length === 0 || f.length >= old.length * (force ? 0.6 : 0.85))) {
+          use = f; // complete answer: it replaces the old list (removed titles disappear)
+        } else {
+          const m = new Map(old.map((o) => [o.id, o] as const)); // still running / failed / looks incomplete: keep + add
+          f.forEach((x) => m.set(x.id, x));
+          use = [...m.values()];
+        }
+        for (const it of use) {
+          if (ids.has(it.id)) continue;
+          ids.add(it.id);
+          out.push(it);
+        }
+      }
+      return dedupeTitle(out);
+    };
+
     let timer: number | null = null;
     const flush = () => {
       timer = null;
       if (alive()) {
-        setItems(dedupeTitle([...combined]));
+        setItems(compose());
         setReady(true);
       }
     };
@@ -43,6 +75,7 @@ export function useLibrary(sources: AppSource[]) {
     let done = 0;
     await Promise.all(
       list.map(async (src) => {
+        const seen = new Set<string>();
         try {
           await browseDirectoryWithDeepScan(
             src.url,
@@ -53,7 +86,7 @@ export function useLibrary(sources: AppSource[]) {
                 if (seen.has(it.id)) continue;
                 if (it.mediaKind !== 'movie' && it.mediaKind !== 'series' && it.mediaKind !== 'generic_folder') continue;
                 seen.add(it.id);
-                combined.push({
+                fresh.get(src.id)!.push({
                   ...it,
                   mediaKind: it.mediaKind === 'generic_folder' ? (src.type === 'series' ? 'series' : 'movie') : it.mediaKind,
                   sourceServerName: src.name,
@@ -65,8 +98,9 @@ export function useLibrary(sources: AppSource[]) {
             },
             force
           );
+          status.set(src.id, 'ok');
         } catch {
-          /* one server being offline must not stop the others */
+          status.set(src.id, 'fail'); // one server being offline must not stop the others, nor erase its titles
         } finally {
           done++;
           if (alive()) setProgress(`${done}/${list.length} servers`);
@@ -76,7 +110,7 @@ export function useLibrary(sources: AppSource[]) {
 
     if (timer !== null) window.clearTimeout(timer);
     if (!alive()) return;
-    const finalItems = dedupeTitle(combined);
+    const finalItems = compose();
     if (finalItems.length > 0) {
       setItems(finalItems);
       const ts = Date.now();

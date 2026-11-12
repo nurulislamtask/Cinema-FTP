@@ -624,13 +624,14 @@ export async function browseDirectoryWithDeepScan(
       // If organized by A-Z buckets, unpack the buckets to pull all TV Series
       const unpackedSeries: ParsedFtpItem[] = [];
       const seenIds = new Set<string>();
+      let failedBuckets = 0;
 
       for (let i = 0; i < letterBuckets.length; i += 6) {
         const batch = letterBuckets.slice(i, i + 6);
         await Promise.all(
           batch.map(async (bucket) => {
             try {
-              const bRes = await browseFtpDirectory(bucket.url);
+              const bRes = await browseFtpDirectory(bucket.url).catch(() => browseFtpDirectory(bucket.url, true));
               for (const item of bRes.items) {
                 if (item.mediaKind === 'subtitle' || seenIds.has(item.id)) continue;
                 seenIds.add(item.id);
@@ -643,15 +644,17 @@ export async function browseDirectoryWithDeepScan(
                   year: yr,
                 });
               }
-            } catch {}
+            } catch {
+              failedBuckets++;
+            }
           })
         );
         if (onStreamChunk) onStreamChunk(sortNewestFirst([...unpackedSeries]));
       }
 
       const sortedSeries = sortNewestFirst(unpackedSeries);
-      unpackedDirCache.set(normUrl, sortedSeries);
-      if (sortedSeries.length > 0) {
+      if (failedBuckets === 0) unpackedDirCache.set(normUrl, sortedSeries);
+      if (sortedSeries.length > 0 && failedBuckets === 0) {
         persistentIndexCache.set(normUrl, { timestamp: Date.now(), items: sortedSeries, hasSubfolders: true });
         savePersistentIndexCache();
       }
@@ -750,12 +753,13 @@ export async function browseDirectoryWithDeepScan(
 
   // Crawl in parallel batches of 6 for high performance
   const BATCH_SIZE = 6;
+  let failedFolders = 0;
   for (let i = 0; i < targetFolders.length; i += BATCH_SIZE) {
     const batch = targetFolders.slice(i, i + BATCH_SIZE);
     await Promise.all(
       batch.map(async (folder) => {
         try {
-          const subRes = await browseFtpDirectory(folder.url);
+          const subRes = await browseFtpDirectory(folder.url).catch(() => browseFtpDirectory(folder.url, true));
           for (const subItem of subRes.items) {
             if (subItem.mediaKind === 'year_folder' || seenIds.has(subItem.id)) continue;
             seenIds.add(subItem.id);
@@ -772,7 +776,9 @@ export async function browseDirectoryWithDeepScan(
           if (onProgress) {
             onProgress(unpackedItems.length, folder.cleanTitle);
           }
-        } catch {}
+        } catch {
+          failedFolders++;
+        }
       })
     );
 
@@ -784,13 +790,16 @@ export async function browseDirectoryWithDeepScan(
 
   const sortedUnpacked = sortNewestFirst(unpackedItems);
   // Cache in memory and localStorage for subsequent instant loading
-  unpackedDirCache.set(normUrl, sortedUnpacked);
-  persistentIndexCache.set(normUrl, {
-    timestamp: Date.now(),
-    items: sortedUnpacked,
-    hasSubfolders: true,
-  });
-  savePersistentIndexCache();
+  // a scan where some folders could not be read is incomplete: never remember it as the full list
+  if (failedFolders === 0) {
+    unpackedDirCache.set(normUrl, sortedUnpacked);
+    persistentIndexCache.set(normUrl, {
+      timestamp: Date.now(),
+      items: sortedUnpacked,
+      hasSubfolders: true,
+    });
+    savePersistentIndexCache();
+  }
 
   return {
     directResult: dirRes,
